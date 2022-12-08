@@ -35,7 +35,8 @@ pub fn init(config: Config) -> chip::pac::Peripherals {
 
     let peripherals = chip::pac::Peripherals::take().unwrap();
 
-    cctl::init(&peripherals.RCU, &config.clock_cfg);
+    
+    cctl::init(&peripherals.RCU, &peripherals.FMC, &config.clock_cfg);
     
 
     peripherals

@@ -59,6 +59,6 @@ impl ClockDivider for u32 {
 
 impl AsRef<u32> for Hertz {
     fn as_ref(&self) -> &u32 {
-        todo!()
+        &self.0
     }
 }

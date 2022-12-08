@@ -57,8 +57,9 @@ impl ClockDivider for PLLPreDiv {
 }
 
 pub struct Config {
-    pll: PLLConfig,
-    ck_sys: ClockSrc,
+    pub pll: PLLConfig,
+    pub ck_sys: ClockSrc,
+    pub ahb_prediv: AHBPreDiv,
 }
 
 impl Default for Config {
@@ -70,7 +71,7 @@ impl Default for Config {
     }
 }
 
-pub(crate) fn init(rcu: &crate::pac::RCU, config: &Config) {
+pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config) {
 
     let pll_hz = match config.pll {
         PLLConfig::Off => {
@@ -111,7 +112,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, config: &Config) {
         },
     };
     
-    let (hz, scs_val) = match config.ck_sys {
+    let (ck_sys_hz, scs_val) = match config.ck_sys {
         ClockSrc::IRC8M => {
             (Hertz::mhz(8), 0b00)
         },
@@ -124,6 +125,33 @@ pub(crate) fn init(rcu: &crate::pac::RCU, config: &Config) {
         },
     };
 
+    assert!(ck_sys_hz < Hertz::mhz(180));
+
+    let ck_ahb = match.config.ahb_prediv {
+
+    };
+
+    //Set the flash wait state before changing the clock freq
+    if ck_ahb <= Hertz::mhz(36) {
+        fmc.ws.write(|w| unsafe { w.wscnt().bits(0) } );
+
+    } else if ck_ahb <= Hertz::mhz(73) {
+        fmc.ws.write(|w| unsafe { w.wscnt().bits(1) } );
+
+    } else if ck_ahb <= Hertz::mhz(108) {
+        fmc.ws.write(|w| unsafe { w.wscnt().bits(2) } );
+
+    } else if ck_ahb <= Hertz::mhz(144) {
+        fmc.ws.write(|w| unsafe { w.wscnt().bits(3) } );
+
+    } else if ck_ahb <= Hertz::mhz(180) {
+        fmc.ws.write(|w| unsafe { w.wscnt().bits(4) } );
+
+    } else {
+        panic!("invalid clock freq: {}", hz.0);
+    }
+
+    // set clock mux
     rcu.cfg0.write(|w| w.scs().variant(scs_val));
 
 
