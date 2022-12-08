@@ -1,3 +1,5 @@
+use core::ops::{Div, Mul};
+
 
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug, Eq)]
 pub struct Hertz(pub u32);
@@ -16,17 +18,47 @@ impl Hertz {
     }
 }
 
-/// This is a convenience shortcut for [`Hertz::hz`]
-pub fn hz(hertz: u32) -> Hertz {
-    Hertz::hz(hertz)
+pub trait ClockDivider {
+    fn divide(&self, hz: Hertz) -> Hertz;   
 }
 
-/// This is a convenience shortcut for [`Hertz::khz`]
-pub fn khz(kilohertz: u32) -> Hertz {
-    Hertz::khz(kilohertz)
+pub trait ClockMultiplier {
+    fn multiply(&self, hz: Hertz) -> Hertz;
 }
 
-/// This is a convenience shortcut for [`Hertz::mhz`]
-pub fn mhz(megahertz: u32) -> Hertz {
-    Hertz::mhz(megahertz)
+impl<D> Div<D> for Hertz
+where D: ClockDivider {
+    type Output = Hertz;
+
+    fn div(self, rhs: D) -> Self::Output {
+        rhs.divide(self)
+    }
+}
+
+impl<M> Mul<M> for Hertz
+where M: ClockMultiplier {
+    type Output = Hertz;
+
+    fn mul(self, rhs: M) -> Self::Output {
+        rhs.multiply(self)
+    }
+}
+
+impl ClockMultiplier for u32 {
+    fn multiply(&self, hz: Hertz) -> Hertz {
+        Hertz::hz(hz.0 * self)
+    }
+}
+
+impl ClockDivider for u32 {
+    fn divide(&self, hz: Hertz) -> Hertz {
+        Hertz::hz(hz.0 / self)
+    }
+}
+
+
+impl AsRef<u32> for Hertz {
+    fn as_ref(&self) -> &u32 {
+        todo!()
+    }
 }

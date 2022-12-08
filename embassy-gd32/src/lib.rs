@@ -15,6 +15,8 @@ pub use chip::pac;
 mod time;
 mod cctl;
 
+pub use cctl::*;
+
 pub use embassy_cortex_m::executor;
 
 pub struct Config {
