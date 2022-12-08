@@ -56,6 +56,35 @@ impl ClockDivider for PLLPreDiv {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AHBPreDiv {
+    None,
+    Div2,
+    Div4,
+    Div8,
+    Div16,
+    Div64,
+    Div128,
+    Div256,
+    Div512,
+}
+
+impl ClockDivider for AHBPreDiv {
+    fn divide(&self, hz: Hertz) -> Hertz {
+        match self {
+            AHBPreDiv::None => hz,
+            AHBPreDiv::Div2 => Hertz::hz(hz.0 / 2),
+            AHBPreDiv::Div4 => Hertz::hz(hz.0 / 4),
+            AHBPreDiv::Div8 => Hertz::hz(hz.0 / 8),
+            AHBPreDiv::Div16 => Hertz::hz(hz.0 / 16),
+            AHBPreDiv::Div64 => Hertz::hz(hz.0 / 64),
+            AHBPreDiv::Div128 => Hertz::hz(hz.0 / 128),
+            AHBPreDiv::Div256 => Hertz::hz(hz.0 / 256),
+            AHBPreDiv::Div512 => Hertz::hz(hz.0 / 512),
+        }
+    }
+}
+
 pub struct Config {
     pub pll: PLLConfig,
     pub ck_sys: ClockSrc,
@@ -67,6 +96,7 @@ impl Default for Config {
         Self {
             pll: PLLConfig::Off,
             ck_sys: ClockSrc::IRC8M,
+            ahb_prediv: AHBPreDiv::None,
         }
     }
 }
@@ -127,9 +157,20 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
 
     assert!(ck_sys_hz < Hertz::mhz(180));
 
-    let ck_ahb = match.config.ahb_prediv {
-
+    let (ck_ahb, ahb_psc_bits) = match config.ahb_prediv {
+        AHBPreDiv::None => (ck_sys_hz, 0b0000),
+        AHBPreDiv::Div2 => (ck_sys_hz / config.ahb_prediv, 0b1000),
+        AHBPreDiv::Div4 => (ck_sys_hz / config.ahb_prediv, 0b1001),
+        AHBPreDiv::Div8 => (ck_sys_hz / config.ahb_prediv, 0b1010),
+        AHBPreDiv::Div16 => (ck_sys_hz / config.ahb_prediv, 0b1011),
+        AHBPreDiv::Div64 => (ck_sys_hz / config.ahb_prediv, 0b1100),
+        AHBPreDiv::Div128 => (ck_sys_hz / config.ahb_prediv, 0b1101),
+        AHBPreDiv::Div256 => (ck_sys_hz / config.ahb_prediv, 0b1110),
+        AHBPreDiv::Div512 => (ck_sys_hz / config.ahb_prediv, 0b1111),
     };
+
+    //write the AHB prescaler factor
+    rcu.cfg0.write(|w| w.ahbpsc().variant(ahb_psc_bits));
 
     //Set the flash wait state before changing the clock freq
     if ck_ahb <= Hertz::mhz(36) {
@@ -148,7 +189,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
         fmc.ws.write(|w| unsafe { w.wscnt().bits(4) } );
 
     } else {
-        panic!("invalid clock freq: {}", hz.0);
+        panic!("invalid clock freq: {}", ck_ahb.0);
     }
 
     // set clock mux
