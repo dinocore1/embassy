@@ -33,6 +33,18 @@ impl<'d, T: Pin> Flex<'d, T> {
         let r = self.pin.block();
         let n = self.pin.pin();
 
+        let (v, octl) = match pull {
+            Pull::None => (0b0100_u32, 0_u8),
+            Pull::Up => (0b1000_u32, 1_u8),
+            Pull::Down => (0b1000_u32, 0_u8),
+        };
+        
+        if n <= 7 {
+            r.ctl0.modify(|_, w| unsafe { w.bits(v << (4*n)) });
+        } else {
+            r.ctl1.modify(|_, w| unsafe { w.bits(v << (4*(n-8))) });
+        }
+
 
     }
 }
