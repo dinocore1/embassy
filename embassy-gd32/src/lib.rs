@@ -13,10 +13,15 @@ mod chip;
 pub use chip::pac;
 
 mod time;
-mod cctl;
 
+mod cctl;
 pub use cctl::*;
 
+mod gpio;
+pub use gpio::*;
+
+
+pub use embassy_hal_common::{into_ref, Peripheral, PeripheralRef};
 pub use embassy_cortex_m::executor;
 
 pub struct Config {

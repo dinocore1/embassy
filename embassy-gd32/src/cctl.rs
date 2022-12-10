@@ -106,7 +106,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     let pll_hz = match config.pll {
         PLLConfig::Off => {
             //disable the PLL
-            rcu.ctl.write(|w| w.pllen().clear_bit());
+            rcu.ctl.modify(|_, w| w.pllen().clear_bit());
             Hertz::hz(0)
         },
         PLLConfig::On(src, mul) => {
@@ -114,21 +114,21 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
             // set the pll source
             let pll_hz = match src {
                 PLLSource::IRC8MDiv2 => {
-                    rcu.cfg0.write(|w| w.pllsel().clear_bit());
+                    rcu.cfg0.modify(|_, w| w.pllsel().clear_bit());
                     Hertz::mhz(4) * mul
                 },
                 PLLSource::HXTAL(hz, prediv) => {
-                    rcu.cfg0.write(|w| w.pllsel().set_bit());
+                    rcu.cfg0.modify(|_, w| w.pllsel().set_bit());
                     hz / prediv * mul
                 },
                 PLLSource::IRC48M(prediv) => {
-                    rcu.cfg0.write(|w| w.pllsel().set_bit());
+                    rcu.cfg0.modify(|_, w| w.pllsel().set_bit());
                     Hertz::mhz(48) / prediv * mul
                 },
             };
 
             //set the multiplication factor
-            rcu.cfg0.write(|w| {
+            rcu.cfg0.modify(|_, w| {
                 let bits = mul.get_bits();
                 let w = w.pllmf_5().variant(0b10000 & bits != 0);
                 let w = w.pllmf_4().variant(0b01000 & bits != 0);
@@ -136,7 +136,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
             });
 
             //enable the PLL
-            rcu.ctl.write(|w| w.pllen().set_bit());
+            rcu.ctl.modify(|_, w| w.pllen().set_bit());
 
             pll_hz
         },
@@ -147,7 +147,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
             (Hertz::mhz(8), 0b00)
         },
         ClockSrc::HXTAL(hz) => {
-            rcu.ctl.write(|w| w.hxtalen().set_bit());
+            rcu.ctl.modify(|_, w| w.hxtalen().set_bit());
             (hz, 0b01)
         },
         ClockSrc::PLL => {
@@ -170,30 +170,30 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     };
 
     //write the AHB prescaler factor
-    rcu.cfg0.write(|w| w.ahbpsc().variant(ahb_psc_bits));
+    rcu.cfg0.modify(|_, w| w.ahbpsc().variant(ahb_psc_bits));
 
     //Set the flash wait state before changing the clock freq
     if ck_ahb <= Hertz::mhz(36) {
-        fmc.ws.write(|w| unsafe { w.wscnt().bits(0) } );
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(0) } );
 
     } else if ck_ahb <= Hertz::mhz(73) {
-        fmc.ws.write(|w| unsafe { w.wscnt().bits(1) } );
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(1) } );
 
     } else if ck_ahb <= Hertz::mhz(108) {
-        fmc.ws.write(|w| unsafe { w.wscnt().bits(2) } );
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(2) } );
 
     } else if ck_ahb <= Hertz::mhz(144) {
-        fmc.ws.write(|w| unsafe { w.wscnt().bits(3) } );
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(3) } );
 
     } else if ck_ahb <= Hertz::mhz(180) {
-        fmc.ws.write(|w| unsafe { w.wscnt().bits(4) } );
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(4) } );
 
     } else {
         panic!("invalid clock freq: {}", ck_ahb.0);
     }
 
     // set clock mux
-    rcu.cfg0.write(|w| w.scs().variant(scs_val));
+    rcu.cfg0.modify(|_, w| w.scs().variant(scs_val));
 
 
 
