@@ -33,10 +33,19 @@ impl<'d, T: Pin> Flex<'d, T> {
         let r = self.pin.block();
         let n = self.pin.pin();
 
-        let (v, octl) = match pull {
-            Pull::None => (0b0100_u32, 0_u8),
-            Pull::Up => (0b1000_u32, 1_u8),
-            Pull::Down => (0b1000_u32, 0_u8),
+        let v = match pull {
+            Pull::None => 0b0100_u32,
+            Pull::Up => {
+                r.octl.modify(|_, w| unsafe { w.bits(1 << n) });
+                0b1000_u32
+            },
+            Pull::Down => {
+                r.octl.modify(|r, w| {
+                    let v = r.bits() & !(1 << n);
+                    unsafe { w.bits(v) }
+                });
+                0b1000_u32
+            },
         };
         
         if n <= 7 {
