@@ -6,6 +6,8 @@ pub const FLASH_SIZE: usize = 512 * 1024;
 embassy_hal_common::peripherals! {
     RCU,
     GPIOA,
+    GPIOB,
+    GPIOC,
     PA0,
     PA1,
     PA2,
@@ -25,6 +27,8 @@ embassy_hal_common::peripherals! {
 }
 
 impl_gpio!(GPIOA, crate::gpio::GPIOPort::A);
+impl_gpio!(GPIOB, crate::gpio::GPIOPort::B);
+impl_gpio!(GPIOC, crate::gpio::GPIOPort::C);
 
 impl_pin!(PA0, 0, 0);
 impl_pin!(PA1, 0, 1);
