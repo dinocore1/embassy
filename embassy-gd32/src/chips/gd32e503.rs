@@ -3,8 +3,9 @@ pub(crate) use gd32e5::gd32e503 as pac;
 
 pub const FLASH_SIZE: usize = 512 * 1024;
 
-
 embassy_hal_common::peripherals! {
+    RCU,
+    GPIOA,
     PA0,
     PA1,
     PA2,
@@ -22,6 +23,8 @@ embassy_hal_common::peripherals! {
     PA14,
     PA15,
 }
+
+impl_gpio!(GPIOA, crate::gpio::GPIOPort::A);
 
 impl_pin!(PA0, 0, 0);
 impl_pin!(PA1, 0, 1);

@@ -1,6 +1,5 @@
 #![macro_use]
 
-
 use crate::{Peripheral, into_ref, PeripheralRef};
 use crate::pac::gpioa as gpio;
 
@@ -254,6 +253,36 @@ pub(crate) mod sealed {
         }
 
     }
+
+    pub trait GPIO {
+        fn port(&self) -> GPIOPort;
+
+        fn _enable(&self) {
+            let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+            match self.port() {
+                GPIOPort::A => rcu.apb2en.modify(|_,w| w.paen().set_bit()),
+                GPIOPort::B => rcu.apb2en.modify(|_,w| w.pben().set_bit()),
+                GPIOPort::C => rcu.apb2en.modify(|_,w| w.pcen().set_bit()),
+                GPIOPort::D => rcu.apb2en.modify(|_,w| w.pden().set_bit()),
+                GPIOPort::E => rcu.apb2en.modify(|_,w| w.peen().set_bit()),
+                GPIOPort::F => rcu.apb2en.modify(|_,w| w.pfen().set_bit()),
+                GPIOPort::G => rcu.apb2en.modify(|_,w| w.pgen().set_bit()),
+            }
+        }
+
+        fn _disable(&self) {
+            let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+            match self.port() {
+                GPIOPort::A => rcu.apb2en.modify(|_,w| w.paen().clear_bit()),
+                GPIOPort::B => rcu.apb2en.modify(|_,w| w.pben().clear_bit()),
+                GPIOPort::C => rcu.apb2en.modify(|_,w| w.pcen().clear_bit()),
+                GPIOPort::D => rcu.apb2en.modify(|_,w| w.pden().clear_bit()),
+                GPIOPort::E => rcu.apb2en.modify(|_,w| w.peen().clear_bit()),
+                GPIOPort::F => rcu.apb2en.modify(|_,w| w.pfen().clear_bit()),
+                GPIOPort::G => rcu.apb2en.modify(|_,w| w.pgen().clear_bit()),
+            }
+        }
+    }
 }
 
 pub trait Pin: Peripheral<P = Self> + sealed::Pin + Sized + 'static {
@@ -286,8 +315,30 @@ macro_rules! impl_pin {
     };
 }
 
-pub(crate) fn init(rcu: &crate::pac::RCU) {
+macro_rules! impl_gpio {
+    ($name:ident, $port:expr) => {
+        impl crate::gpio::GPIO for peripherals::$name {}
+        impl crate::gpio::sealed::GPIO for peripherals::$name {
+            #[inline]
+            fn port(&self) -> crate::gpio::GPIOPort {
+                $port
+            }
+        }
+    }
+}
 
-    rcu.apb2en.modify(|_,w| w.paen().set_bit());
+pub enum GPIOPort {
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G
+}
 
+pub trait GPIO: Peripheral<P = Self> + sealed::GPIO + Sized + 'static {
+    fn enable(&self) {
+        self._enable();
+    }
 }

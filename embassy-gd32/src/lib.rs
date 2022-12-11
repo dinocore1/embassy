@@ -37,8 +37,6 @@ pub fn init(config: Config) -> chip::Peripherals {
 
     
     cctl::init(&peripherals.RCU, &peripherals.FMC, &config.clock_cfg);
-
-    gpio::init(&peripherals.RCU);
     
 
     chip::Peripherals::take()
