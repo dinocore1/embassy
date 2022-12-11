@@ -5,20 +5,15 @@
 )))]
 compile_error!("No chip feature activated. You must activate one of the chip features.");
 
+mod time;
 
+pub mod cctl;
+
+pub mod gpio;
 
 #[cfg_attr(feature = "gd32e503", path = "chips/gd32e503.rs")]
 mod chip;
-
-pub use chip::pac;
-
-mod time;
-
-mod cctl;
-pub use cctl::*;
-
-mod gpio;
-pub use gpio::*;
+pub(crate) use chip::pac;
 
 
 pub use embassy_hal_common::{into_ref, Peripheral, PeripheralRef};
@@ -36,7 +31,7 @@ impl Default for Config {
     }
 }
 
-pub fn init(config: Config) -> chip::pac::Peripherals {
+pub fn init(config: Config) -> chip::Peripherals {
 
     let peripherals = chip::pac::Peripherals::take().unwrap();
 
@@ -44,6 +39,6 @@ pub fn init(config: Config) -> chip::pac::Peripherals {
     cctl::init(&peripherals.RCU, &peripherals.FMC, &config.clock_cfg);
     
 
-    peripherals
+    chip::Peripherals::take()
 
 }

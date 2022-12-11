@@ -35,4 +35,5 @@ gd32e5 = { version = "0.7", optional = true }
 
 
 [features]
+default = ["defmt"]
 gd32e503 = ["gd32e5/gd32e503", "gd32e5/critical-section"]
