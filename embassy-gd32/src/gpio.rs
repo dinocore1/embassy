@@ -285,3 +285,9 @@ macro_rules! impl_pin {
         
     };
 }
+
+pub(crate) fn init(rcu: &crate::pac::RCU) {
+
+    rcu.apb2en.modify(|_,w| w.paen().set_bit());
+
+}
