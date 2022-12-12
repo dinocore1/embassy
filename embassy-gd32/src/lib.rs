@@ -5,7 +5,7 @@
 )))]
 compile_error!("No chip feature activated. You must activate one of the chip features.");
 
-mod time;
+mod utils;
 
 pub mod cctl;
 
@@ -15,6 +15,11 @@ pub mod gpio;
 mod chip;
 pub(crate) use chip::pac;
 
+#[cfg(feature = "timedriver-rtc")]
+mod timedriver_rtc;
+
+#[cfg(feature = "timedriver-rtc")]
+pub use embassy_time::*;
 
 pub use embassy_hal_common::{into_ref, Peripheral, PeripheralRef};
 pub use embassy_cortex_m::executor;

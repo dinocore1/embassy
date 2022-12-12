@@ -151,8 +151,8 @@ impl RtcDriver {
         let r = rtc();
         if r.events_ovrflw.read().bits() == 1 {
             r.events_ovrflw.write(|w| w);
-            self.next_period();
-        }
+            self.nex_period();
+        }t
 
         if r.events_compare[3].read().bits() == 1 {
             r.events_compare[3].write(|w| w);

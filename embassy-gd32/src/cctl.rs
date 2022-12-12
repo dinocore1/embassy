@@ -1,5 +1,4 @@
-use crate::time::{ClockDivider, ClockMultiplier};
-use crate::time::Hertz;
+use crate::utils::{Hertz, ClockDivider, ClockMultiplier};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ClockSrc {
