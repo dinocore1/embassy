@@ -15,6 +15,12 @@ pub mod gpio;
 mod chip;
 pub(crate) use chip::pac;
 
+pub mod interrupt {
+    pub use cortex_m::interrupt::{CriticalSection, Mutex};
+    pub use embassy_cortex_m::interrupt::*;
+    pub use crate::chip::irqs::*;
+}
+
 #[cfg(feature = "timedriver-rtc")]
 mod timedriver_rtc;
 
@@ -23,6 +29,7 @@ pub use embassy_time::*;
 
 pub use embassy_hal_common::{into_ref, Peripheral, PeripheralRef};
 pub use embassy_cortex_m::executor;
+pub use embassy_cortex_m::interrupt::_export::interrupt;
 
 pub struct Config {
     clock_cfg: cctl::Config,

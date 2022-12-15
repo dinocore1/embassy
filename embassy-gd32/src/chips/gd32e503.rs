@@ -4,6 +4,7 @@ pub(crate) use gd32e5::gd32e503 as pac;
 pub const FLASH_SIZE: usize = 512 * 1024;
 
 embassy_hal_common::peripherals! {
+    RTC,
     RCU,
     GPIOA,
     GPIOB,
@@ -46,3 +47,10 @@ impl_pin!(PA12, 0, 12);
 impl_pin!(PA13, 0, 13);
 impl_pin!(PA14, 0, 14);
 impl_pin!(PA15, 0, 15);
+
+pub mod irqs {
+    use embassy_cortex_m::interrupt::_export::declare;
+    use crate::pac::Interrupt as InterruptEnum;
+
+    declare!(RTC);
+}
