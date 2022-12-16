@@ -9,6 +9,10 @@ use embassy_sync::blocking_mutex::CriticalSectionMutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::driver::AlarmHandle;
 
+use embassy_time::driver::Driver;
+
+use defmt::{info, unwrap};
+
 fn rtc() -> &'static crate::pac::rtc::RegisterBlock {
     unsafe { &*crate::pac::RTC::ptr() }
 }
@@ -47,7 +51,6 @@ struct RtcState {
 impl RtcState {
 
     fn read_time(&mut self) -> u64 {
-
         let r = rtc();
 
         let mut overflow = false;
@@ -56,12 +59,11 @@ impl RtcState {
             w.ovif().clear_bit()
         });
 
-        let counter = read_counter(r);
-
-        if overflow || counter < self.last_read_value {
+        if overflow {
             self.period += 1;
         }
 
+        let counter = read_counter(r);
         self.last_read_value = counter;
 
         let time = (self.period as u64) << 32;
@@ -113,19 +115,21 @@ impl RtcDriver {
         pmu.ctl0.write(|w| w.bkpwen().set_bit() );
 
         //set the rtc clock mux to lxtal and enable lxtal
-        rcu.bdctl.write(|w| w.rtcen().set_bit()
-                                        .rtcsrc().variant(0b01)
+        rcu.bdctl.write(|w| w.rtcsrc().variant(0b01)
                                         .lxtalen().set_bit()
                                     );
 
         //wait for lxtal to become stable
         while rcu.bdctl.read().lxtalstb().bit_is_clear() {}
-                                    
-        let irq = unsafe { interrupt::RTC::steal() };
-        irq.set_priority(crate::interrupt::Priority::P1);
-        irq.enable();
+
+        //enable rtc clock
+        rcu.bdctl.modify(|_, w| w.rtcen().set_bit());
 
         do_config(|| {
+
+            // set the counter to zero
+            r.cnth.write(|w| w.cnt().variant(0));
+            r.cntl.write(|w| w.cnt().variant(0));
 
             //set the prescaler to zero
             r.psch.write(|w|w.psc().variant(0));
@@ -138,16 +142,20 @@ impl RtcDriver {
             
         });
 
+        let irq = unsafe { interrupt::RTC::steal() };
+        irq.set_priority(crate::interrupt::Priority::P1);
+        irq.enable();
+
     }
 
     fn on_interrupt(&self) {
-        let r = rtc();
+        let rtc = rtc();
 
         self.state.lock(|s| {
             let state = unsafe { &mut *s.get() };
 
             do_config(|| {
-                r.inten.modify(|_, w| w.alrmie().clear_bit());
+                rtc.inten.modify(|_, w| w.alrmie().clear_bit());
             });
             
             let now = state.read_time();
@@ -174,7 +182,7 @@ impl RtcDriver {
 unsafe impl Sync for RtcDriver {
 }
 
-impl embassy_time::driver::Driver for RtcDriver {
+impl Driver for RtcDriver {
     fn now(&self) -> u64 {
         self.state.lock(|s| {
             let state = unsafe { &mut *s.get() };
@@ -209,7 +217,7 @@ impl embassy_time::driver::Driver for RtcDriver {
         }
         
         self.alarm_state.timestamp.set(timestamp);
-        let alarm_value = 0xFFF_FFFF & timestamp as u32;
+        let alarm_value = (0x0000_0000_FFFF_FFFF & timestamp) as u32;
 
 
         do_config(||{
