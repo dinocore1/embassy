@@ -4,6 +4,7 @@ pub(crate) use gd32e5::gd32e503 as pac;
 pub const FLASH_SIZE: usize = 512 * 1024;
 
 embassy_hal_common::peripherals! {
+    PMU,
     RTC,
     RCU,
     GPIOA,
