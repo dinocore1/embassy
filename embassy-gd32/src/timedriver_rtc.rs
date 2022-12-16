@@ -135,9 +135,10 @@ impl RtcDriver {
             r.psch.write(|w|w.psc().variant(0));
             r.pscl.write(|w|w.psc().variant(0));
 
-            //enable only the overflow interrupt
-            r.inten.write(|w| w.
-                ovie().set_bit()
+            //enable overflow and alarm interrupt
+            r.inten.write(|w| w
+                .ovie().set_bit()
+                .alrmie().set_bit()
             );
             
         });
@@ -154,23 +155,28 @@ impl RtcDriver {
         self.state.lock(|s| {
             let state = unsafe { &mut *s.get() };
 
-            do_config(|| {
-                rtc.inten.modify(|_, w| w.alrmie().clear_bit());
+            let mut alarm = false;
+            rtc.ctl.modify(|r, w| {
+                alarm = r.alrmif().bit_is_set();
+                w.alrmif().clear_bit()
             });
-            
+
             let now = state.read_time();
+            let timeout = self.alarm_state.timestamp.get() <= now;
 
-            let r = self.alarm_free.fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
-                if !x && self.alarm_state.timestamp.get() <= now {
-                    Some(true)
-                } else {
-                    None
+            if timeout {
+                let r = self.alarm_free.fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
+                    if !x {
+                        Some(true)
+                    } else {
+                        None
+                    }
+                });
+    
+                if let Ok(_) = r {
+                    let f: fn(*mut()) = unsafe { core::mem::transmute(self.alarm_state.callback.get()) };
+                    f(self.alarm_state.ctx.get());
                 }
-            });
-
-            if let Ok(_) = r {
-                let f: fn(*mut()) = unsafe { core::mem::transmute(self.alarm_state.callback.get()) };
-                f(self.alarm_state.ctx.get());
             }
 
         });
@@ -217,14 +223,12 @@ impl Driver for RtcDriver {
         }
         
         self.alarm_state.timestamp.set(timestamp);
+
         let alarm_value = (0x0000_0000_FFFF_FFFF & timestamp) as u32;
-
-
         do_config(||{
-            let r = rtc();
-            r.alrmh.write(|w| w.alrm().variant((alarm_value >> 16) as u16));
-            r.alrml.write(|w| w.alrm().variant((0xFFFF & alarm_value) as u16));
-            r.inten.modify(|_, w| w.alrmie().set_bit());
+            let rtc = rtc();
+            rtc.alrmh.write(|w| w.alrm().variant((alarm_value >> 16) as u16));
+            rtc.alrml.write(|w| w.alrm().variant((0xFFFF & alarm_value) as u16));
         });
 
         true
