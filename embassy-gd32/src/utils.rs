@@ -18,6 +18,19 @@ impl Hertz {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for Hertz {
+    fn format(&self, fmt: defmt::Formatter) {
+        if self.0 < 1_000 {
+            defmt::write!(fmt, "{}hz", self.0);
+        } else if self.0 < 1_000_000 {
+            defmt::write!(fmt, "{}Khz", self.0 / 1_000);
+        } else {
+            defmt::write!(fmt, "{}Mhz", self.0 / 1_000_000);
+        }
+    }
+}
+
 pub trait ClockDivider {
     fn divide(&self, hz: Hertz) -> Hertz;   
 }

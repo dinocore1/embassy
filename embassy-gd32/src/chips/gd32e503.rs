@@ -7,6 +7,7 @@ embassy_hal_common::peripherals! {
     PMU,
     RTC,
     RCU,
+    SPI0,
     GPIOA,
     GPIOB,
     GPIOC,
@@ -49,9 +50,12 @@ impl_pin!(PA13, 0, 13);
 impl_pin!(PA14, 0, 14);
 impl_pin!(PA15, 0, 15);
 
+impl_spi!(SPI0, SPI0, SPI0);
+
 pub mod irqs {
     use embassy_cortex_m::interrupt::_export::declare;
     use crate::pac::Interrupt as InterruptEnum;
 
     declare!(RTC);
+    declare!(SPI0);
 }

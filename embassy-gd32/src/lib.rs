@@ -5,11 +5,17 @@
 )))]
 compile_error!("No chip feature activated. You must activate one of the chip features.");
 
+// This mod MUST go first, so that the others see its macros.
+pub(crate) mod fmt;
+
 mod utils;
+pub use utils::Hertz;
 
 pub mod cctl;
 
 pub mod gpio;
+
+pub mod spi;
 
 #[cfg_attr(feature = "gd32e503", path = "chips/gd32e503.rs")]
 mod chip;

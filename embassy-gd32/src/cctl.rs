@@ -1,3 +1,5 @@
+use core::mem::MaybeUninit;
+
 use crate::utils::{Hertz, ClockDivider, ClockMultiplier};
 
 #[derive(Debug, Clone, Copy)]
@@ -84,10 +86,16 @@ impl ClockDivider for AHBPreDiv {
     }
 }
 
+pub enum LXTALConfig {
+    None,
+    Enable(Hertz),
+}
+
 pub struct Config {
     pub pll: PLLConfig,
     pub ck_sys: ClockSrc,
     pub ahb_prediv: AHBPreDiv,
+    pub lxtal: LXTALConfig,
 }
 
 impl Default for Config {
@@ -96,9 +104,33 @@ impl Default for Config {
             pll: PLLConfig::Off,
             ck_sys: ClockSrc::IRC8M,
             ahb_prediv: AHBPreDiv::None,
+            lxtal: LXTALConfig::None,
         }
     }
 }
+
+mod sealed {
+    trait CCTLPeripherial {
+        fn frequency() -> crate::utils::Hertz;
+        fn enable();
+        fn disable();
+    }
+
+    
+
+}
+
+pub struct Clocks {
+    pub ahb: Hertz,
+    pub rtc: Hertz,
+}
+
+static mut CLOCK_FREQS: MaybeUninit<Clocks> = MaybeUninit::uninit();
+
+pub(crate) fn get_freq() -> &'static Clocks {
+    unsafe { &*CLOCK_FREQS.as_ptr() }
+}
+
 
 pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config) {
 
@@ -171,6 +203,11 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     //write the AHB prescaler factor
     rcu.cfg0.modify(|_, w| w.ahbpsc().variant(ahb_psc_bits));
 
+    let mut clocks = Clocks {
+        ahb: ck_ahb,
+        rtc: Hertz(0),
+    };
+
     //Set the flash wait state before changing the clock freq
     if ck_ahb <= Hertz::mhz(36) {
         fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(0) } );
@@ -193,6 +230,10 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
 
     // set clock mux
     rcu.cfg0.modify(|_, w| w.scs().variant(scs_val));
+
+    info!("CPU freq: {}", clocks.ahb);
+
+    unsafe { CLOCK_FREQS.write(clocks); }
 
 
 

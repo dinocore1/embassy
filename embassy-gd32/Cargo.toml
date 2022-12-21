@@ -7,7 +7,6 @@ license = "MIT OR Apache-2.0"
 [package.metadata.embassy_docs]
 src_base = "https://github.com/embassy-rs/embassy/blob/embassy-gd32-v$VERSION/embassy-gd32/src/"
 src_base_git = "https://github.com/embassy-rs/embassy/blob/$COMMIT/embassy-gd32/src/"
-
 features = ["defmt"]
 flavors = [
     { regex_feature = "gd32e5.*", target = "thumbv8m.main-none-eabihf" },
@@ -21,6 +20,7 @@ embassy-cortex-m = { version = "0.1.0", path = "../embassy-cortex-m", features =
 embassy-hal-common = {version = "0.1.0", path = "../embassy-hal-common" }
 embassy-time = { version = "0.1.0", path = "../embassy-time", optional = true }
 # embassy-embedded-hal = {version = "0.1.0", path = "../embassy-embedded-hal" }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.6", features = ["unproven"] }
 atomic-polyfill = "1.0.1"
 defmt = { version = "0.3", optional = true }
 log = { version = "0.4.14", optional = true }
