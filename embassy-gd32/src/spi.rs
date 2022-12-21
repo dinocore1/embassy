@@ -4,6 +4,7 @@ use crate::{Hertz, Peripheral};
 use crate::interrupt::{Interrupt, InterruptExt};
 pub use embedded_hal_02::spi;
 use embassy_hal_common::{into_ref, PeripheralRef};
+use embedded_hal_02::spi::Polarity;
 
 pub struct Config {
     pub freq: Hertz,
@@ -33,7 +34,19 @@ impl<'d, T: Instance> Spim<'d, T> {
     ) -> Self {
         into_ref!(sck, miso, mosi);
 
+        let r = T::regs();
 
+        r.ctl0.write(|w| {
+            match config.mode.polarity {
+                Polarity::IdleLow => w.ckpl().clear_bit(),
+                Polarity::IdleHigh => w.ckpl().set_bit(),
+            }
+            
+        });
+
+
+        into_ref!(spi);
+        Self { _p: spi }
     }
 }
 
