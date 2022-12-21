@@ -32,7 +32,7 @@ pub use embassy_cortex_m::executor;
 pub use embassy_cortex_m::interrupt::_export::interrupt;
 
 pub struct Config {
-    clock_cfg: cctl::Config,
+    pub clock_cfg: cctl::Config,
 }
 
 impl Default for Config {

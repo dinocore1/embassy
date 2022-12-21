@@ -154,7 +154,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
         },
     };
 
-    assert!(ck_sys_hz < Hertz::mhz(180));
+    assert!(ck_sys_hz <= Hertz::mhz(180));
 
     let (ck_ahb, ahb_psc_bits) = match config.ahb_prediv {
         AHBPreDiv::None => (ck_sys_hz, 0b0000),
