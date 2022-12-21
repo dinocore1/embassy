@@ -1,14 +1,16 @@
 #![macro_use]
 
+use crate::chip::peripherals;
 use crate::{Hertz, Peripheral};
 use crate::interrupt::{Interrupt, InterruptExt};
 pub use embedded_hal_02::spi;
 use embassy_hal_common::{into_ref, PeripheralRef};
-use embedded_hal_02::spi::Polarity;
+use embedded_hal_02::spi::{Polarity, Phase};
 
 pub struct Config {
     pub freq: Hertz,
     pub mode: spi::Mode,
+    pub endian: Endian,
 }
 
 impl Default for Config {
@@ -16,7 +18,22 @@ impl Default for Config {
         Self {
             freq: Hertz(1_000_000),
             mode: spi::MODE_0,
+            endian: Endian::MSB,
         }
+    }
+}
+
+pub enum Endian {
+    MSB,
+    LSB,
+}
+
+pub struct Prescaler(u8);
+
+impl crate::utils::ClockDivider for Prescaler {
+    fn divide(&self, hz: Hertz) -> Hertz {
+        let div = 1 << (self.0 + 2);
+        Hertz::hz(hz.0 / div)
     }
 }
 
@@ -37,10 +54,23 @@ impl<'d, T: Instance> Spim<'d, T> {
         let r = T::regs();
 
         r.ctl0.write(|w| {
-            match config.mode.polarity {
+            let w = match config.mode.polarity {
                 Polarity::IdleLow => w.ckpl().clear_bit(),
                 Polarity::IdleHigh => w.ckpl().set_bit(),
-            }
+            };
+
+            let w = match config.mode.phase {
+                Phase::CaptureOnFirstTransition => w.ckph().clear_bit(),
+                Phase::CaptureOnSecondTransition => w.ckph().set_bit(),
+            };
+
+            let w = match config.endian {
+                Endian::MSB => w.lf().clear_bit(),
+                Endian::LSB => w.lf().set_bit(),
+            };
+
+            w
+
             
         });
 
@@ -72,7 +102,7 @@ pub(crate) mod sealed {
     }
 }
 
-pub trait Instance: Peripheral<P = Self> + sealed::Instance + 'static {
+pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLPeripherial +'static {
     type Interrupt: Interrupt;
 }
 
@@ -92,6 +122,22 @@ macro_rules! impl_spi {
 
         impl crate::spi::Instance for peripherals::$type {
             type Interrupt = crate::interrupt::$irq;
+        }
+
+        impl crate::cctl::CCTLPeripherial for peripherals::$type {
+            fn frequency() -> crate::utils::Hertz {
+                let r = unsafe { &*crate::pac::$pac_type::ptr() };
+                let prescaler = Prescaler(r.ctl0.read().psc().bits());
+                crate::cctl::get_freq().sys / prescaler
+            }
+        
+            fn enable() {
+                todo!()
+            }
+        
+            fn disable() {
+                todo!()
+            }
         }
         
     };

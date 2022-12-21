@@ -110,17 +110,17 @@ impl Default for Config {
 }
 
 mod sealed {
-    trait CCTLPeripherial {
-        fn frequency() -> crate::utils::Hertz;
-        fn enable();
-        fn disable();
-    }
-
-    
 
 }
 
+pub trait CCTLPeripherial {
+    fn frequency() -> crate::utils::Hertz;
+    fn enable();
+    fn disable();
+}
+
 pub struct Clocks {
+    pub sys: Hertz,
     pub ahb: Hertz,
     pub rtc: Hertz,
 }
@@ -203,7 +203,8 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     //write the AHB prescaler factor
     rcu.cfg0.modify(|_, w| w.ahbpsc().variant(ahb_psc_bits));
 
-    let mut clocks = Clocks {
+    let clocks = Clocks {
+        sys: ck_sys_hz,
         ahb: ck_ahb,
         rtc: Hertz(0),
     };
