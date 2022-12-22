@@ -1,6 +1,6 @@
 #![macro_use]
 
-use crate::{Peripheral, into_ref, PeripheralRef};
+use crate::{Peripheral, into_ref, PeripheralRef, Hertz};
 use crate::pac::gpioa as gpio;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -11,7 +11,7 @@ pub enum Pull {
     Down,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Speed {
     Low,
     Medium,
@@ -19,10 +19,26 @@ pub enum Speed {
     VeryHigh,
 }
 
+impl From<Hertz> for Speed {
+    fn from(value: Hertz) -> Self {
+        if value <= Hertz::mhz(10) {
+            Speed::Low
+        } else if value <= Hertz::mhz(20) {
+            Speed::Medium
+        } else if value <= Hertz::mhz(50) {
+            Speed::High
+        } else {
+            Speed::VeryHigh
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum OutputType {
-    PushPull,
-    OpenDrain,
+    GPIOPushPull,
+    GPIOOpenDrain,
+    AFPushPull,
+    AFOpenDrain
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -104,6 +120,13 @@ impl<'d, T: Pin> Output<'d, T> {
     }
 }
 
+#[inline]
+fn set_mode(mut reg: u32, mode: u32, pos: u8) -> u32 {
+    reg &= !(0x0F << pos);
+    reg |= mode << pos;
+    reg
+}
+
 pub struct Flex<'d, T: Pin> {
     pub(crate) pin: PeripheralRef<'d, T>,
 }
@@ -121,25 +144,28 @@ impl<'d, T: Pin> Flex<'d, T> {
             let r = self.pin.block();
             let n = self.pin.pin();
 
-            let v = match pull {
+            let mode_value = match pull {
                 Pull::None => 0b0100_u32,
                 Pull::Up => {
-                    r.octl.modify(|_, w| unsafe { w.bits(1 << n) });
+                    r.octl.modify(|r, w| unsafe { w.bits(r.bits() | (1 << n)) });
                     0b1000_u32
                 },
                 Pull::Down => {
-                    r.octl.modify(|r, w| {
-                        let v = r.bits() & !(1 << n);
-                        unsafe { w.bits(v) }
-                    });
+                    r.octl.modify(|r, w| unsafe { w.bits(r.bits() & !(1 << n)) });
                     0b1000_u32
                 },
             };
             
             if n <= 7 {
-                r.ctl0.modify(|_, w| unsafe { w.bits(v << (4*n)) });
+                r.ctl0.modify(|r, w| { 
+                    let v = set_mode(r.bits(), mode_value, n);
+                    unsafe { w.bits(v) } 
+                });
             } else {
-                r.ctl1.modify(|_, w| unsafe { w.bits(v << (4*(n-8))) });
+                r.ctl1.modify(|r, w| {
+                    let v = set_mode(r.bits(), mode_value, n - 8);
+                    unsafe { w.bits(v) }
+                });
             }
         });
         
@@ -151,21 +177,23 @@ impl<'d, T: Pin> Flex<'d, T> {
             let r = self.pin.block();
             let n = self.pin.pin();
 
-            let v = match out_type {
-                OutputType::PushPull => 0b0000_u32,
-                OutputType::OpenDrain => 0b0100_u32,
+            let mode_value = match out_type {
+                OutputType::GPIOPushPull => 0b0000_u32,
+                OutputType::GPIOOpenDrain => 0b0100_u32,
+                OutputType::AFPushPull => 0b1000_u32,
+                OutputType::AFOpenDrain => 0b1100_u32,
             };
 
-            let v = match speed {
-                Speed::Low => v | 0b01,
-                Speed::Medium => v | 0b10,
-                Speed::High | Speed::VeryHigh => v | 0b11,
+            let mode_value = match speed {
+                Speed::Low => mode_value | 0b01,
+                Speed::Medium => mode_value | 0b10,
+                Speed::High | Speed::VeryHigh => mode_value | 0b11,
             };
 
             if n <= 7 {
-                r.ctl0.modify(|_, w| unsafe { w.bits(v << (4*n)) });
+                r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
             } else {
-                r.ctl1.modify(|_, w| unsafe { w.bits(v << (4*(n-8))) });
+                r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
             }
 
         });

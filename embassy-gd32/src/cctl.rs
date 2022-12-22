@@ -70,19 +70,54 @@ pub enum AHBPreDiv {
     Div512,
 }
 
+impl AHBPreDiv {
+    fn operate(&self, hz: Hertz) -> (Hertz, u8) {
+        match self {
+            AHBPreDiv::None => (hz, 0b0000),
+            AHBPreDiv::Div2 => (Hertz::hz(hz.0 / 2), 0b1000),
+            AHBPreDiv::Div4 => (Hertz::hz(hz.0 / 4), 0b1001),
+            AHBPreDiv::Div8 => (Hertz::hz(hz.0 / 8), 0b1010),
+            AHBPreDiv::Div16 => (Hertz::hz(hz.0 / 16), 0b1011),
+            AHBPreDiv::Div64 => (Hertz::hz(hz.0 / 64), 0b1100),
+            AHBPreDiv::Div128 => (Hertz::hz(hz.0 / 128), 0b1101),
+            AHBPreDiv::Div256 => (Hertz::hz(hz.0 / 256), 0b1110),
+            AHBPreDiv::Div512 => (Hertz::hz(hz.0 / 512), 0b1111),
+        }
+    }
+}
+
 impl ClockDivider for AHBPreDiv {
     fn divide(&self, hz: Hertz) -> Hertz {
+        let (hz, bits) = self.operate(hz);
+        hz
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum APBPreDiv {
+    None,
+    Div2,
+    Div4,
+    Div8,
+    Div16,
+}
+
+impl APBPreDiv {
+    fn operate(&self, hz: Hertz) -> (Hertz, u8) {
         match self {
-            AHBPreDiv::None => hz,
-            AHBPreDiv::Div2 => Hertz::hz(hz.0 / 2),
-            AHBPreDiv::Div4 => Hertz::hz(hz.0 / 4),
-            AHBPreDiv::Div8 => Hertz::hz(hz.0 / 8),
-            AHBPreDiv::Div16 => Hertz::hz(hz.0 / 16),
-            AHBPreDiv::Div64 => Hertz::hz(hz.0 / 64),
-            AHBPreDiv::Div128 => Hertz::hz(hz.0 / 128),
-            AHBPreDiv::Div256 => Hertz::hz(hz.0 / 256),
-            AHBPreDiv::Div512 => Hertz::hz(hz.0 / 512),
+            APBPreDiv::None => (hz, 0b000),
+            APBPreDiv::Div2 => (Hertz::hz(hz.0 / 2), 0b100),
+            APBPreDiv::Div4 => (Hertz::hz(hz.0 / 4), 0b101),
+            APBPreDiv::Div8 => (Hertz::hz(hz.0 / 8), 0b110),
+            APBPreDiv::Div16 => (Hertz::hz(hz.0 / 16), 0b111),
         }
+    }
+}
+
+impl ClockDivider for APBPreDiv {
+    fn divide(&self, hz: Hertz) -> Hertz {
+        let (hz, bits) = self.operate(hz);
+        hz
     }
 }
 
@@ -95,6 +130,8 @@ pub struct Config {
     pub pll: PLLConfig,
     pub ck_sys: ClockSrc,
     pub ahb_prediv: AHBPreDiv,
+    pub apb1_prediv: APBPreDiv,
+    pub apb2_prediv: APBPreDiv,
     pub lxtal: LXTALConfig,
 }
 
@@ -104,6 +141,8 @@ impl Default for Config {
             pll: PLLConfig::Off,
             ck_sys: ClockSrc::IRC8M,
             ahb_prediv: AHBPreDiv::None,
+            apb1_prediv: APBPreDiv::None,
+            apb2_prediv: APBPreDiv::None,
             lxtal: LXTALConfig::None,
         }
     }
@@ -119,9 +158,12 @@ pub trait CCTLPeripherial {
     fn disable();
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Clocks {
     pub sys: Hertz,
     pub ahb: Hertz,
+    pub apb1: Hertz,
+    pub apb2: Hertz,
     pub rtc: Hertz,
 }
 
@@ -188,24 +230,25 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
 
     assert!(ck_sys_hz <= Hertz::mhz(180));
 
-    let (ck_ahb, ahb_psc_bits) = match config.ahb_prediv {
-        AHBPreDiv::None => (ck_sys_hz, 0b0000),
-        AHBPreDiv::Div2 => (ck_sys_hz / config.ahb_prediv, 0b1000),
-        AHBPreDiv::Div4 => (ck_sys_hz / config.ahb_prediv, 0b1001),
-        AHBPreDiv::Div8 => (ck_sys_hz / config.ahb_prediv, 0b1010),
-        AHBPreDiv::Div16 => (ck_sys_hz / config.ahb_prediv, 0b1011),
-        AHBPreDiv::Div64 => (ck_sys_hz / config.ahb_prediv, 0b1100),
-        AHBPreDiv::Div128 => (ck_sys_hz / config.ahb_prediv, 0b1101),
-        AHBPreDiv::Div256 => (ck_sys_hz / config.ahb_prediv, 0b1110),
-        AHBPreDiv::Div512 => (ck_sys_hz / config.ahb_prediv, 0b1111),
-    };
+    let (ck_ahb, ahb_psc_bits) = config.ahb_prediv.operate(ck_sys_hz);
 
-    //write the AHB prescaler factor
-    rcu.cfg0.modify(|_, w| w.ahbpsc().variant(ahb_psc_bits));
+    let (ck_apb1, apb1_psc_bits) = config.apb1_prediv.operate(ck_ahb);
+    assert!(ck_apb1 <= Hertz::mhz(90));
+
+    let (ck_apb2, apb2_psc_bits) = config.apb2_prediv.operate(ck_ahb);
+
+    //write the bus prescaler factors
+    rcu.cfg0.modify(|_, w| w
+            .ahbpsc().variant(ahb_psc_bits)
+            .apb1psc().variant(apb1_psc_bits)
+            .apb2psc().variant(apb2_psc_bits)
+        );
 
     let clocks = Clocks {
         sys: ck_sys_hz,
         ahb: ck_ahb,
+        apb1: ck_apb1,
+        apb2: ck_apb2,
         rtc: Hertz(0),
     };
 
@@ -232,7 +275,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     // set clock mux
     rcu.cfg0.modify(|_, w| w.scs().variant(scs_val));
 
-    info!("CPU freq: {}", clocks.ahb);
+    info!("Clock freq: {}", clocks);
 
     unsafe { CLOCK_FREQS.write(clocks); }
 
