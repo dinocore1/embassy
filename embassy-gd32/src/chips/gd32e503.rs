@@ -8,6 +8,7 @@ embassy_hal_common::peripherals! {
     RTC,
     RCU,
     SPI0,
+    SPI1,
     GPIOA,
     GPIOB,
     GPIOC,
@@ -51,6 +52,7 @@ impl_pin!(PA14, 0, 14);
 impl_pin!(PA15, 0, 15);
 
 impl_spi!(SPI0, SPI0, SPI0);
+//impl_spi!(SPI1, SPI1, SPI1);
 
 pub mod irqs {
     use embassy_cortex_m::interrupt::_export::declare;
@@ -58,4 +60,5 @@ pub mod irqs {
 
     declare!(RTC);
     declare!(SPI0);
+    declare!(SPI1);
 }

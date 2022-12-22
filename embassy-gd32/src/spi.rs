@@ -56,19 +56,22 @@ pub struct Spim<'d, T: Instance> {
     _p: PeripheralRef<'d, T>,
 }
 
-impl<'d, T> Spim<'d, T>
-where
-    T: Instance,
+impl<'d, T: Instance> Spim<'d, T>
 {
     pub fn new(
         spi: impl Peripheral<P = T> + 'd,
+        irq: impl Peripheral<P = T::Interrupt> + 'd,
         sck: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
         miso: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
         mosi: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
         config: Config,
     ) -> Self {
 
-        into_ref!(spi, miso, mosi);
+        into_ref!(spi, miso, mosi, irq);
+
+        irq.set_handler(Self::on_interrupt);
+        irq.unpend();
+        irq.enable();
 
         // enable the clock to the SPI peripheral
         T::enable();
@@ -92,6 +95,13 @@ where
 
             let w = w.psc().variant(config.clk_prescaler.0);
 
+            // config for master mode full-duplex
+            let w = w.mstmod().set_bit();
+            let w = w.ro().clear_bit();
+            let w = w.bden().clear_bit();
+
+            let w = w.spien().set_bit();
+
             w
         });
 
@@ -107,6 +117,13 @@ where
         mosi.set_as_output(crate::gpio::OutputType::AFPushPull, gpio_speed);
 
         Self { _p: spi }
+    }
+
+    fn on_interrupt(_: *mut()) {
+        let r = T::regs();
+        let s = T::state();
+
+        
     }
 
 
@@ -134,7 +151,7 @@ pub(crate) mod sealed {
     }
 }
 
-pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLPeripherial +'static {
+pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLPeripherial + 'static {
     type Interrupt: Interrupt;
 }
 
@@ -143,7 +160,7 @@ macro_rules! impl_spi {
 
         impl crate::spi::sealed::Instance for peripherals::$type {
             fn regs() -> &'static crate::pac::spi0::RegisterBlock {
-                unsafe { &*crate::pac::$pac_type::ptr() }
+                unsafe { &*(crate::pac::$pac_type::ptr() as *const crate::pac::spi0::RegisterBlock) }
             }
 
             fn state() -> &'static crate::spi::sealed::State {
