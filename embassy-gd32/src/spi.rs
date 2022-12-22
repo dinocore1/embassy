@@ -3,13 +3,12 @@
 use crate::chip::peripherals;
 use crate::{Hertz, Peripheral};
 use crate::interrupt::{Interrupt, InterruptExt};
-pub use embedded_hal_02::spi;
+pub use embedded_hal_02::spi as hal;
 use embassy_hal_common::{into_ref, PeripheralRef};
 use embedded_hal_02::spi::{Polarity, Phase};
-pub use crate::chip::pac::spi0::ctl0::PSC_A;
 
 pub struct Config {
-    pub mode: spi::Mode,
+    pub mode: hal::Mode,
     pub endian: Endian,
     pub clk_prescaler: Prescaler,
 }
@@ -17,9 +16,9 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            mode: spi::MODE_0,
+            mode: hal::MODE_0,
             endian: Endian::MSB,
-            clk_prescaler: Prescaler(PSC_A::DIV2),
+            clk_prescaler: Prescaler::DIV2,
         }
     }
 }
@@ -29,25 +28,55 @@ pub enum Endian {
     LSB,
 }
 
-pub struct Prescaler(PSC_A);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Prescaler {
+    DIV2 = 0,
+    DIV4 = 1,
+    DIV8 = 2,
+    DIV16  = 3,
+    DIV32 = 4,
+    DIV64 = 5,
+    DIV128 = 6,
+    DIV256 = 7,
+}
 
-impl From<PSC_A> for Prescaler {
-    fn from(value: PSC_A) -> Self {
-        Prescaler(value)
+impl From<Prescaler> for u8 {
+    #[inline(always)]
+    fn from(variant: Prescaler) -> Self {
+        variant as _
+    }
+}
+
+impl Prescaler {
+    #[inline(always)]
+    fn from_bits(bits: u8) -> Self {
+        unsafe { core::mem::transmute(bits) }
+        // match bits {
+        //     0 => Prescaler::DIV2,
+        //     1 => Prescaler::DIV4,
+        //     2 => Prescaler::DIV8,
+        //     3 => Prescaler::DIV16,
+        //     4 => Prescaler::DIV32,
+        //     5 => Prescaler::DIV64,
+        //     6 => Prescaler::DIV128,
+        //     7 => Prescaler::DIV256,
+        //     _ => unreachable!(),
+        // }
     }
 }
 
 impl crate::utils::ClockDivider for Prescaler {
     fn divide(&self, hz: Hertz) -> Hertz {
-        match self.0 {
-            PSC_A::DIV2 => Hertz(hz.0 / 2),
-            PSC_A::DIV4 => Hertz(hz.0 / 4),
-            PSC_A::DIV8 => Hertz(hz.0 / 8),
-            PSC_A::DIV16 => Hertz(hz.0 / 16),
-            PSC_A::DIV32 => Hertz(hz.0 / 32),
-            PSC_A::DIV64 => Hertz(hz.0 / 64),
-            PSC_A::DIV128 => Hertz(hz.0 / 128),
-            PSC_A::DIV256 => Hertz(hz.0 / 256),
+        match self {
+            Prescaler::DIV2 => Hertz(hz.0 / 2),
+            Prescaler::DIV4 => Hertz(hz.0 / 4),
+            Prescaler::DIV8 => Hertz(hz.0 / 8),
+            Prescaler::DIV16 => Hertz(hz.0 / 16),
+            Prescaler::DIV32 => Hertz(hz.0 / 32),
+            Prescaler::DIV64 => Hertz(hz.0 / 64),
+            Prescaler::DIV128 => Hertz(hz.0 / 128),
+            Prescaler::DIV256 => Hertz(hz.0 / 256),
         }
     }
 }
@@ -93,7 +122,7 @@ impl<'d, T: Instance> Spim<'d, T>
                 Endian::LSB => w.lf().set_bit(),
             };
 
-            let w = w.psc().variant(config.clk_prescaler.0);
+            let w = w.psc().bits(u8::from(config.clk_prescaler));
 
             // config for master mode full-duplex
             let w = w.mstmod().set_bit();
@@ -172,41 +201,47 @@ macro_rules! impl_spi {
         impl crate::spi::Instance for peripherals::$type {
             type Interrupt = crate::interrupt::$irq;
         }
-
-        impl crate::cctl::CCTLPeripherial for peripherals::$type {
-            fn frequency() -> crate::utils::Hertz {
-                let r = unsafe { &*crate::pac::$pac_type::ptr() };
-                let prescaler = crate::spi::Prescaler::from(r.ctl0.read().psc().variant());
-                let clocks = crate::cctl::get_freq();
-                let pclk = match stringify!($type) {
-                    "SPI0" => clocks.apb2,
-                    "SPI1" => clocks.apb1,
-                    "SPI2" => clocks.apb1,
-                    _ => unreachable!(),
-                };
-                pclk / prescaler
-            }
-        
-            fn enable() {
-                let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
-                match stringify!($type) {
-                    "SPI0" => rcu.apb2en.modify(|_, w| w.spi0en().set_bit()),
-                    "SPI1" => rcu.apb1en.modify(|_, w| w.spi1en().set_bit()),
-                    "SPI2" => rcu.apb1en.modify(|_, w| w.spi2en().set_bit()),
-                    _ => unreachable!(),
-                }
-            }
-        
-            fn disable() {
-                let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
-                match stringify!($type) {
-                    "SPI0" => rcu.apb2en.modify(|_, w| w.spi0en().clear_bit()),
-                    "SPI1" => rcu.apb1en.modify(|_, w| w.spi1en().clear_bit()),
-                    "SPI2" => rcu.apb1en.modify(|_, w| w.spi2en().clear_bit()),
-                    _ => unreachable!(),
-                }
-            }
-        }
         
     };
 }
+
+
+impl crate::cctl::CCTLPeripherial for peripherals::SPI0 {
+    fn frequency() -> crate::utils::Hertz {
+        let r = unsafe { &*crate::pac::SPI0::ptr() };
+        let prescaler = crate::spi::Prescaler::from_bits(r.ctl0.read().psc().bits());
+        let clocks = crate::cctl::get_freq();
+        clocks.apb2 / prescaler
+    }
+
+    fn enable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.apb2en.modify(|_, w| w.spi0en().set_bit())
+    }
+
+    fn disable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.apb2en.modify(|_, w| w.spi0en().clear_bit())
+    }
+}
+
+impl crate::cctl::CCTLPeripherial for peripherals::SPI1 {
+    fn frequency() -> crate::utils::Hertz {
+        let r = unsafe { &*crate::pac::SPI1::ptr() };
+        let prescaler = crate::spi::Prescaler::from_bits(r.ctl0.read().psc().bits());
+        let clocks = crate::cctl::get_freq();
+        clocks.apb1 / prescaler
+    }
+
+    fn enable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.apb1en.modify(|_, w| w.spi1en().set_bit())
+    }
+
+    fn disable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.apb1en.modify(|_, w| w.spi1en().clear_bit())
+    }
+}
+
+

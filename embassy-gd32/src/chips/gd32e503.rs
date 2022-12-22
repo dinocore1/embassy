@@ -52,7 +52,7 @@ impl_pin!(PA14, 0, 14);
 impl_pin!(PA15, 0, 15);
 
 impl_spi!(SPI0, SPI0, SPI0);
-//impl_spi!(SPI1, SPI1, SPI1);
+impl_spi!(SPI1, SPI1, SPI1);
 
 pub mod irqs {
     use embassy_cortex_m::interrupt::_export::declare;
