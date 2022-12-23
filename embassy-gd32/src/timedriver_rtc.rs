@@ -1,11 +1,12 @@
 
 use core::ptr;
-use core::sync::atomic::{Ordering, AtomicBool};
+use core::sync::atomic::{Ordering, AtomicU8};
 use core::cell::{UnsafeCell, Cell};
 
 use crate::interrupt::{Interrupt, InterruptExt};
 use crate::{interrupt};
-use embassy_sync::blocking_mutex::CriticalSectionMutex;
+use critical_section::CriticalSection;
+use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::driver::AlarmHandle;
 
@@ -17,10 +18,12 @@ fn rtc() -> &'static crate::pac::rtc::RegisterBlock {
     unsafe { &*crate::pac::RTC::ptr() }
 }
 
+const ALARM_COUNT: usize = 3;
+
 struct RtcDriver {
-    state: CriticalSectionMutex<UnsafeCell<RtcState>>,
-    alarm_free: AtomicBool,
-    alarm_state: AlarmState,
+    state: Mutex<UnsafeCell<RtcState>>,
+    alarm_count: AtomicU8,
+    alarms: Mutex<[AlarmState ; ALARM_COUNT]>,
 }
 
 struct AlarmState {
@@ -152,35 +155,43 @@ impl RtcDriver {
     fn on_interrupt(&self) {
         let rtc = rtc();
 
-        self.state.lock(|s| {
-            let state = unsafe { &mut *s.get() };
-
-            let mut alarm = false;
-            rtc.ctl.modify(|r, w| {
-                alarm = r.alrmif().bit_is_set();
-                w.alrmif().clear_bit()
-            });
-
-            let now = state.read_time();
-            let timeout = self.alarm_state.timestamp.get() <= now;
-
-            if timeout {
-                let r = self.alarm_free.fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
-                    if !x {
-                        Some(true)
-                    } else {
-                        None
-                    }
-                });
-    
-                if let Ok(_) = r {
-                    let f: fn(*mut()) = unsafe { core::mem::transmute(self.alarm_state.callback.get()) };
-                    f(self.alarm_state.ctx.get());
-                }
-            }
-
+        let mut alarm = false;
+        rtc.ctl.modify(|r, w| {
+            alarm = r.alrmif().bit_is_set();
+            w.alrmif().clear_bit()
         });
 
+        critical_section::with(|cs| {
+            let state = unsafe { &mut *self.state.borrow(cs).get() };
+            let alarms = self.alarms.borrow(cs);
+
+            let now = state.read_time();
+
+            for a in &alarms[0..self.alarm_count.load(Ordering::Acquire) as usize] {
+                if a.timestamp.get() <= now {
+                    //trigger the alarm
+                    a.timestamp.set(u64::MAX);
+                    let f: fn(*mut ()) = unsafe { core::mem::transmute(a.callback.get()) };
+                    f(a.ctx.get());
+                }
+            }
+        });
+
+    }
+
+    fn get_alarm<'a>(&'a self, cs: CriticalSection<'a>, alarm: AlarmHandle) -> &'a AlarmState {
+        // safety: we're allowed to assume the AlarmState is created by us, and
+        // we never create one that's out of bounds.
+        unsafe { self.alarms.borrow(cs).get_unchecked(alarm.id() as usize) }
+    }
+
+    fn get_next<'a>(&'a self, cs: CriticalSection<'a>) -> u64 {
+        let alarms = self.alarms.borrow(cs);
+        let mut min = u64::MAX;
+        for a in &alarms[0..self.alarm_count.load(Ordering::Acquire) as usize] {
+            min = min.min(a.timestamp.get());
+        }
+        min
     }
 
 }
@@ -197,34 +208,42 @@ impl Driver for RtcDriver {
     }
 
     unsafe fn allocate_alarm(&self) -> Option<embassy_time::driver::AlarmHandle> {
-        let id = self.alarm_free.fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
-            if x {
-                Some(false)
+        let id = self.alarm_count.fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
+            if x < ALARM_COUNT as u8 {
+                Some(x + 1)
             } else {
                 None
             }
         });
 
         match id {
-            Ok(_) => Some(AlarmHandle::new(0)),
+            Ok(id) => Some(AlarmHandle::new(id)),
             Err(_) => None,
         }
     }
 
     fn set_alarm_callback(&self, alarm: embassy_time::driver::AlarmHandle, callback: fn(*mut ()), ctx: *mut ()) {
-        self.alarm_state.callback.set(callback as *const());
-        self.alarm_state.ctx.set(ctx);
+        critical_section::with(|cs| {
+            let alarm = self.get_alarm(cs, alarm);
+            alarm.callback.set(callback as *const());
+            alarm.ctx.set(ctx);
+        })
     }
 
     fn set_alarm(&self, alarm: embassy_time::driver::AlarmHandle, timestamp: u64) -> bool {
-        let t = self.now();
-        if timestamp <= t {
+        // if the alarm is in the past
+        if timestamp <= self.now() + 1000 {
             return false;
         }
-        
-        self.alarm_state.timestamp.set(timestamp);
 
-        let alarm_value = (0x0000_0000_FFFF_FFFF & timestamp) as u32;
+        let next_timestamp = critical_section::with(|cs|{
+            let alarm = self.get_alarm(cs, alarm);
+            alarm.timestamp.set(timestamp);
+
+            self.get_next(cs)
+        });
+
+        let alarm_value = (0x0000_0000_FFFF_FFFF & next_timestamp) as u32;
         do_config(||{
             let rtc = rtc();
             rtc.alrmh.write(|w| w.alrm().variant((alarm_value >> 16) as u16));
@@ -232,17 +251,18 @@ impl Driver for RtcDriver {
         });
 
         true
-
     }
 }
 
+const ALARM_STATE_NEW: AlarmState = AlarmState::new();
+
 embassy_time::time_driver_impl!(static DRIVER: RtcDriver = RtcDriver {
-    state: CriticalSectionMutex::const_new(CriticalSectionRawMutex::new(), UnsafeCell::new(RtcState {
+    state: Mutex::const_new(CriticalSectionRawMutex::new(), UnsafeCell::new(RtcState {
         period: 0,
         last_read_value: 0,
     })),
-    alarm_free: AtomicBool::new(true),
-    alarm_state: AlarmState::new(),
+    alarm_count: AtomicU8::new(0),
+    alarms: Mutex::const_new(CriticalSectionRawMutex::new(), [ALARM_STATE_NEW ; ALARM_COUNT]),
 });
 
 #[interrupt]

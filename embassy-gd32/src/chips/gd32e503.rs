@@ -7,6 +7,8 @@ embassy_hal_common::peripherals! {
     PMU,
     RTC,
     RCU,
+    DMA0,
+    DMA1,
     SPI0,
     SPI1,
     GPIOA,
@@ -28,6 +30,20 @@ embassy_hal_common::peripherals! {
     PA13,
     PA14,
     PA15,
+
+    DMA0_CH0,
+    DMA0_CH1,
+    DMA0_CH2,
+    DMA0_CH3,
+    DMA0_CH4,
+    DMA0_CH5,
+    DMA0_CH6,
+
+    DMA1_CH0,
+    DMA1_CH1,
+    DMA1_CH2,
+    DMA1_CH3,
+    DMA1_CH4,
 }
 
 impl_gpio!(GPIOA, crate::gpio::GPIOPort::A);
@@ -54,6 +70,23 @@ impl_pin!(PA15, 0, 15);
 impl_spi!(SPI0, SPI0, SPI0);
 impl_spi!(SPI1, SPI1, SPI1);
 
+impl_dma!(DMA0, DMA0, 7);
+impl_dma!(DMA1, DMA1, 5);
+
+impl_dma_channel!(DMA0_CH0, DMA0, 0);
+impl_dma_channel!(DMA0_CH1, DMA0, 1);
+impl_dma_channel!(DMA0_CH2, DMA0, 2);
+impl_dma_channel!(DMA0_CH3, DMA0, 3);
+impl_dma_channel!(DMA0_CH4, DMA0, 4);
+impl_dma_channel!(DMA0_CH5, DMA0, 5);
+impl_dma_channel!(DMA0_CH6, DMA0, 6);
+
+impl_dma_channel!(DMA1_CH0, DMA1, 0);
+impl_dma_channel!(DMA1_CH1, DMA1, 1);
+impl_dma_channel!(DMA1_CH2, DMA1, 2);
+impl_dma_channel!(DMA1_CH3, DMA1, 3);
+impl_dma_channel!(DMA1_CH4, DMA1, 4);
+
 pub mod irqs {
     use embassy_cortex_m::interrupt::_export::declare;
     use crate::pac::Interrupt as InterruptEnum;
@@ -61,4 +94,8 @@ pub mod irqs {
     declare!(RTC);
     declare!(SPI0);
     declare!(SPI1);
+    declare!(USART0);
+    declare!(USART1);
+    declare!(USART2);
+    declare!(CAN0_RX1);
 }

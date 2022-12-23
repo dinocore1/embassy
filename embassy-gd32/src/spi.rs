@@ -6,6 +6,7 @@ use crate::interrupt::{Interrupt, InterruptExt};
 pub use embedded_hal_02::spi as hal;
 use embassy_hal_common::{into_ref, PeripheralRef};
 use embedded_hal_02::spi::{Polarity, Phase};
+use crate::pac::spi0::RegisterBlock as Regs;
 
 pub struct Config {
     pub mode: hal::Mode,
@@ -152,6 +153,10 @@ impl<'d, T: Instance> Spim<'d, T>
         let r = T::regs();
         let s = T::state();
 
+        
+    }
+
+    fn prepare(&mut self, tx: &[u8], rx: &mut [u8]) {
         
     }
 

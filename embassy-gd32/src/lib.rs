@@ -17,9 +17,13 @@ pub mod gpio;
 
 pub mod spi;
 
+pub mod dma;
+
 #[cfg_attr(feature = "gd32e503", path = "chips/gd32e503.rs")]
 mod chip;
 pub(crate) use chip::pac;
+
+pub use chip::Peripherals;
 
 pub mod interrupt {
     pub use cortex_m::interrupt::{CriticalSection, Mutex};
