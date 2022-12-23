@@ -1,5 +1,7 @@
 use core::mem::MaybeUninit;
 
+use atomic_polyfill::{compiler_fence, Ordering};
+
 use crate::utils::{Hertz, ClockDivider, ClockMultiplier};
 
 #[derive(Debug, Clone, Copy)]
@@ -188,6 +190,9 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
             let pll_hz = match src {
                 PLLSource::IRC8MDiv2 => {
                     rcu.cfg0.modify(|_, w| w.pllsel().clear_bit());
+
+                    //wait for IRC8M is stable
+                    while rcu.ctl.read().irc8mstb().bit_is_clear() {}
                     Hertz::mhz(4) * mul
                 },
                 PLLSource::HXTAL(hz, prediv) => {
@@ -202,10 +207,17 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
 
             //set the multiplication factor
             rcu.cfg0.modify(|_, w| {
-                let bits = mul.get_bits();
-                let w = w.pllmf_5().variant(0b10000 & bits != 0);
-                let w = w.pllmf_4().variant(0b01000 & bits != 0);
-                w.pllmf_3_0().variant(0b001111 & bits)
+                let bits = match mul.0 {
+                    2..=16 => mul.0 - 2,
+                    17..=64 => mul.0 - 1,
+                    _ => unreachable!(),
+                };
+                let w = w.pllmf_3_0().variant(0b00_1111 & bits);
+                
+                let w = w.pllmf_4().variant(0b01_0000 & bits != 0);
+                let w = w.pllmf_5().variant(0b10_0000 & bits != 0);
+                
+                w
             });
 
             //enable the PLL
@@ -271,6 +283,8 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     } else {
         panic!("invalid clock freq: {}", ck_ahb.0);
     }
+
+    compiler_fence(Ordering::SeqCst);
 
     // set clock mux
     rcu.cfg0.modify(|_, w| w.scs().variant(scs_val));
