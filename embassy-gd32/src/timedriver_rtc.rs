@@ -175,6 +175,8 @@ impl RtcDriver {
                     f(a.ctx.get());
                 }
             }
+
+            self.reset_alarm(cs);
         });
 
     }
@@ -192,6 +194,17 @@ impl RtcDriver {
             min = min.min(a.timestamp.get());
         }
         min
+    }
+
+    fn reset_alarm<'a>(&'a self, cs: CriticalSection<'a>) {
+        let rtc = rtc();
+        let next_timestamp = self.get_next(cs);
+
+        let alarm_value = (0x0000_0000_FFFF_FFFF & next_timestamp) as u32;
+        do_config(||{
+            rtc.alrmh.write(|w| w.alrm().variant((alarm_value >> 16) as u16));
+            rtc.alrml.write(|w| w.alrm().variant((0xFFFF & alarm_value) as u16));
+        });
     }
 
 }
@@ -231,23 +244,17 @@ impl Driver for RtcDriver {
     }
 
     fn set_alarm(&self, alarm: embassy_time::driver::AlarmHandle, timestamp: u64) -> bool {
+        let now = self.now();
         // if the alarm is in the past
-        if timestamp <= self.now() + 1000 {
+        if timestamp <= now {
             return false;
         }
 
-        let next_timestamp = critical_section::with(|cs|{
+        critical_section::with(|cs|{
             let alarm = self.get_alarm(cs, alarm);
             alarm.timestamp.set(timestamp);
 
-            self.get_next(cs)
-        });
-
-        let alarm_value = (0x0000_0000_FFFF_FFFF & next_timestamp) as u32;
-        do_config(||{
-            let rtc = rtc();
-            rtc.alrmh.write(|w| w.alrm().variant((alarm_value >> 16) as u16));
-            rtc.alrml.write(|w| w.alrm().variant((0xFFFF & alarm_value) as u16));
+            self.reset_alarm(cs);
         });
 
         true
