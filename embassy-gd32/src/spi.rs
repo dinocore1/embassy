@@ -82,6 +82,27 @@ impl crate::utils::ClockDivider for Prescaler {
     }
 }
 
+pub struct Spis<'d, T: Instance> {
+    _p: PeripheralRef<'d, T>,
+}
+
+impl<'d, T: Instance> Spis<'d, T> {
+    pub fn new(
+        spi: impl Peripheral<P = T> + 'd,
+        irq: impl Peripheral<P = T::Interrupt> + 'd,
+        sck: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
+        miso: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
+        mosi: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
+        config: Config,
+    ) -> Self {
+
+        into_ref!(spi);
+
+        Self { _p: spi }
+        
+    }
+}
+
 pub struct Spim<'d, T: Instance> {
     _p: PeripheralRef<'d, T>,
 }

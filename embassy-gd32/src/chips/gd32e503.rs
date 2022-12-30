@@ -9,6 +9,8 @@ embassy_hal_common::peripherals! {
     RCU,
     DMA0,
     DMA1,
+    USART0,
+    USART1,
     SPI0,
     SPI1,
     GPIOA,
@@ -30,6 +32,23 @@ embassy_hal_common::peripherals! {
     PA13,
     PA14,
     PA15,
+
+    PB0,
+    PB1,
+    PB2,
+    PB3,
+    PB4,
+    PB5,
+    PB6,
+    PB7,
+    PB8,
+    PB9,
+    PB10,
+    PB11,
+    PB12,
+    PB13,
+    PB14,
+    PB15,
 
     DMA0_CH0,
     DMA0_CH1,
@@ -67,6 +86,23 @@ impl_pin!(PA13, 0, 13);
 impl_pin!(PA14, 0, 14);
 impl_pin!(PA15, 0, 15);
 
+impl_pin!(PB0, 1, 0);
+impl_pin!(PB1, 1, 1);
+impl_pin!(PB2, 1, 2);
+impl_pin!(PB3, 1, 3);
+impl_pin!(PB4, 1, 4);
+impl_pin!(PB5, 1, 5);
+impl_pin!(PB6, 1, 6);
+impl_pin!(PB7, 1, 7);
+impl_pin!(PB8, 1, 8);
+impl_pin!(PB9, 1, 9);
+impl_pin!(PB10, 1, 10);
+impl_pin!(PB11, 1, 11);
+impl_pin!(PB12, 1, 12);
+impl_pin!(PB13, 1, 13);
+impl_pin!(PB14, 1, 14);
+impl_pin!(PB15, 1, 15);
+
 impl_spi!(SPI0, SPI0, SPI0);
 impl_spi!(SPI1, SPI1, SPI1);
 
@@ -98,4 +134,16 @@ pub mod irqs {
     declare!(USART1);
     declare!(USART2);
     declare!(CAN0_RX1);
+    declare!(DMA0_CHANNEL0);
+    declare!(DMA0_CHANNEL1);
+    declare!(DMA0_CHANNEL2);
+    declare!(DMA0_CHANNEL3);
+    declare!(DMA0_CHANNEL4);
+    declare!(DMA0_CHANNEL5);
+    declare!(DMA0_CHANNEL6);
+    declare!(DMA1_CHANNEL0);
+    declare!(DMA1_CHANNEL1);
+    declare!(DMA1_CHANNEL2);
+    declare!(DMA1_CHANNEL3_DMA1_CHANNEL4);
+
 }

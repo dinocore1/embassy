@@ -6,7 +6,7 @@ use core::task::{Context, Poll};
 use embassy_hal_common::{into_ref, PeripheralRef};
 
 use crate::chip::peripherals;
-use crate::{Hertz, Peripheral};
+use crate::{interrupt, Hertz, Peripheral};
 
 
 pub struct Transfer<'a, C: Channel> {
@@ -90,14 +90,36 @@ impl<'a, C: Channel> Future for Transfer<'a, C> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let channel = C::number();
+        let inst = C::Instance::regs();
+            
+        // must register/re-register waker before reading the interrupt flag register
         C::Instance::wakers()[channel as usize].register(cx.waker());
+        let intf = inst.intf.read();
 
-        let r = C::Instance::regs();
+        let gifx = 1_u32 << (4 * channel);
+        if intf.bits() & gifx != 0 {
+            //clear all channel interrupt flags
+            let all_if = 0x0F_u32 << (4 * channel);
+            inst.intc.write(|w| unsafe { w.bits(all_if) } );
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
 
-
-        todo!()
+        
     }
 }
+
+// fn poll_dma(dma_inst: &crate::pac::dma0::RegisterBlock, gifx: u32, waker: &embassy_sync::waitqueue::AtomicWaker, cx: &mut Context<'_>) -> Poll<()> {
+//     let intf = dma_inst.intf.read();
+//     if intf.bits() & gifx != 0 {
+//         dma_inst.intc.write(|w| unsafe { w.bits(gifx) } );
+//         return Poll::Ready(());
+//     } else {
+//         waker.register(cx.waker());
+//         return Poll::Pending;
+//     }
+// }
 
 
 #[repr(u8)]
@@ -201,5 +223,84 @@ macro_rules! impl_dma_channel {
         }
 
     };
+}
+
+
+
+#[interrupt]
+unsafe fn DMA0_CHANNEL0() {
+    debug!("DMA0_CHANNEL0");
+    let inst = &*crate::pac::DMA0::ptr();
+    let intf = inst.intf.read();
+    if intf.errif0().bit_is_set() {
+        error!("DMA0_CHANNEL0: error");
+    }
+    crate::chip::peripherals::DMA0::wakers()[0].wake();
+}
+
+#[interrupt]
+unsafe fn DMA0_CHANNEL1() {
+    debug!("DMA0_CHANNEL1");
+    let inst = &*crate::pac::DMA0::ptr();
+    let intf = inst.intf.read();
+    if intf.errif1().bit_is_set() {
+        error!("DMA0_CHANNEL1: error");
+    }
+    crate::chip::peripherals::DMA0::wakers()[1].wake();
+}
+
+#[interrupt]
+unsafe fn DMA0_CHANNEL2() {
+    debug!("DMA0_CHANNEL2");
+    let inst = &*crate::pac::DMA0::ptr();
+    let intf = inst.intf.read();
+    if intf.errif2().bit_is_set() {
+        error!("DMA0_CHANNEL2: error");
+    }
+    crate::chip::peripherals::DMA0::wakers()[2].wake();
+}
+
+#[interrupt]
+unsafe fn DMA0_CHANNEL3() {
+    debug!("DMA0_CHANNEL3");
+    let inst = &*crate::pac::DMA0::ptr();
+    let intf = inst.intf.read();
+    if intf.errif3().bit_is_set() {
+        error!("DMA0_CHANNEL3: error");
+    }
+    crate::chip::peripherals::DMA0::wakers()[3].wake();
+}
+
+#[interrupt]
+unsafe fn DMA0_CHANNEL4() {
+    debug!("DMA0_CHANNEL4");
+    let inst = &*crate::pac::DMA0::ptr();
+    let intf = inst.intf.read();
+    if intf.errif4().bit_is_set() {
+        error!("DMA0_CHANNEL4: error");
+    }
+    crate::chip::peripherals::DMA0::wakers()[4].wake();
+}
+
+#[interrupt]
+unsafe fn DMA0_CHANNEL5() {
+    debug!("DMA0_CHANNEL5");
+    let inst = &*crate::pac::DMA0::ptr();
+    let intf = inst.intf.read();
+    if intf.errif5().bit_is_set() {
+        error!("DMA0_CHANNEL5: error");
+    }
+    crate::chip::peripherals::DMA0::wakers()[5].wake();
+}
+
+#[interrupt]
+unsafe fn DMA0_CHANNEL6() {
+    debug!("DMA0_CHANNEL6");
+    let inst = &*crate::pac::DMA0::ptr();
+    let intf = inst.intf.read();
+    if intf.errif6().bit_is_set() {
+        error!("DMA0_CHANNEL6: error");
+    }
+    crate::chip::peripherals::DMA0::wakers()[6].wake();
 }
 

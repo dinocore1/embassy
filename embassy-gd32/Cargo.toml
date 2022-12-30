@@ -13,6 +13,8 @@ flavors = [
 ]
 
 [dependencies]
+# syn = { version = "1.0.76", features = ["full", "extra-traits"] }
+# quote = "1"
 embassy-sync = { version = "0.1.0", path = "../embassy-sync" }
 embassy-executor = { version = "0.1.0", path = "../embassy-executor" }
 embassy-futures = { version = "0.1.0", path = "../embassy-futures" }
