@@ -8,6 +8,8 @@ compile_error!("No chip feature activated. You must activate one of the chip fea
 // This mod MUST go first, so that the others see its macros.
 pub(crate) mod fmt;
 
+mod traits;
+
 mod utils;
 pub use utils::Hertz;
 

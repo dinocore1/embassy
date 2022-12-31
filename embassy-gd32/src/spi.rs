@@ -1,12 +1,22 @@
 #![macro_use]
 
+use core::future::poll_fn;
+
 use crate::chip::peripherals;
+use crate::gpio::AnyPin;
 use crate::{Hertz, Peripheral};
 use crate::interrupt::{Interrupt, InterruptExt};
 pub use embedded_hal_02::spi as hal;
 use embassy_hal_common::{into_ref, PeripheralRef};
 use embedded_hal_02::spi::{Polarity, Phase};
 use crate::pac::spi0::RegisterBlock as Regs;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum Error {
+    BufLen
+
+}
 
 pub struct Config {
     pub mode: hal::Mode,
@@ -79,6 +89,28 @@ impl crate::utils::ClockDivider for Prescaler {
             Prescaler::DIV128 => Hertz(hz.0 / 128),
             Prescaler::DIV256 => Hertz(hz.0 / 256),
         }
+    }
+}
+
+struct Spi<'d, T: Instance> {
+    _p: PeripheralRef<'d, T>,
+    sck: PeripheralRef<'d, AnyPin>,
+    mosi: PeripheralRef<'d, AnyPin>,
+    miso: PeripheralRef<'d, AnyPin>,
+
+}
+
+impl<'d, T: Instance> Spi<'d, T> {
+    pub fn new(
+        spi: impl Peripheral<P = T> + 'd,
+        sck: impl Peripheral<P = impl SckPin<T>> + 'd,
+        mosi: impl Peripheral<P = impl MosiPin<T>> + 'd,
+        miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
+    ) -> Self {
+
+        into_ref!(spi, sck, mosi, miso);
+        sck.set_as_output();
+        todo!()
     }
 }
 
@@ -179,6 +211,25 @@ impl<'d, T: Instance> Spim<'d, T>
 
     fn prepare(&mut self, tx: &[u8], rx: &mut [u8]) {
         
+        
+    }
+
+    pub async fn transfer(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<(), Error> {
+        if tx.len() != rx.len() {
+            return Err(Error::BufLen)
+        }
+
+        // poll_fn(|cx| {
+        //     let regs = T::regs();
+        //     let r = regs.
+        //     r.
+
+        //     todo!()
+
+
+        // }).await;
+
+        todo!()
     }
 
 
@@ -205,6 +256,10 @@ pub(crate) mod sealed {
         fn state() -> &'static State;
     }
 }
+
+pin_trait!(SckPin, Instance);
+pin_trait!(MosiPin, Instance);
+pin_trait!(MisoPin, Instance);
 
 pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLPeripherial + 'static {
     type Interrupt: Interrupt;

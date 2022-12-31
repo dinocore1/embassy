@@ -157,15 +157,9 @@ impl<'d, T: Pin> Flex<'d, T> {
             };
             
             if n <= 7 {
-                r.ctl0.modify(|r, w| { 
-                    let v = set_mode(r.bits(), mode_value, n);
-                    unsafe { w.bits(v) } 
-                });
+                r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
             } else {
-                r.ctl1.modify(|r, w| {
-                    let v = set_mode(r.bits(), mode_value, n - 8);
-                    unsafe { w.bits(v) }
-                });
+                r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
             }
         });
         
