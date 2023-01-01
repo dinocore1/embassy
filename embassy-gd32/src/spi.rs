@@ -21,7 +21,7 @@ pub enum Error {
 pub struct Config {
     pub mode: hal::Mode,
     pub endian: Endian,
-    pub clk_prescaler: Prescaler,
+    pub target_baud: Hertz,
 }
 
 impl Default for Config {
@@ -29,7 +29,7 @@ impl Default for Config {
         Self {
             mode: hal::MODE_0,
             endian: Endian::MSB,
-            clk_prescaler: Prescaler::DIV2,
+            target_baud: Hertz::mhz(1),
         }
     }
 }
@@ -92,26 +92,20 @@ impl crate::utils::ClockDivider for Prescaler {
     }
 }
 
-struct Spi<'d, T: Instance> {
-    _p: PeripheralRef<'d, T>,
-    sck: PeripheralRef<'d, AnyPin>,
-    mosi: PeripheralRef<'d, AnyPin>,
-    miso: PeripheralRef<'d, AnyPin>,
-
-}
-
-impl<'d, T: Instance> Spi<'d, T> {
-    pub fn new(
-        spi: impl Peripheral<P = T> + 'd,
-        sck: impl Peripheral<P = impl SckPin<T>> + 'd,
-        mosi: impl Peripheral<P = impl MosiPin<T>> + 'd,
-        miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
-    ) -> Self {
-
-        into_ref!(spi, sck, mosi, miso);
-        sck.set_as_output();
-        todo!()
-    }
+fn compute_baud_rate(pclk: Hertz, target: Hertz) -> Prescaler {
+    let val = match pclk.0 / target.0 {
+        0 => unreachable!(),
+        1..=2 => Prescaler::DIV2,
+        3..=4 => Prescaler::DIV4,
+        6..=8 => Prescaler::DIV8,
+        7..=16 => Prescaler::DIV16,
+        17..=32 => Prescaler::DIV32,
+        33..=64 => Prescaler::DIV64,
+        65..=128 => Prescaler::DIV128,
+        129..=256 => Prescaler::DIV256,
+        _ => unreachable!(),
+    };
+    val
 }
 
 pub struct Spis<'d, T: Instance> {
@@ -137,6 +131,9 @@ impl<'d, T: Instance> Spis<'d, T> {
 
 pub struct Spim<'d, T: Instance> {
     _p: PeripheralRef<'d, T>,
+    sck: PeripheralRef<'d, AnyPin>,
+    mosi: PeripheralRef<'d, AnyPin>,
+    miso: PeripheralRef<'d, AnyPin>,
 }
 
 impl<'d, T: Instance> Spim<'d, T>
@@ -144,13 +141,13 @@ impl<'d, T: Instance> Spim<'d, T>
     pub fn new(
         spi: impl Peripheral<P = T> + 'd,
         irq: impl Peripheral<P = T::Interrupt> + 'd,
-        sck: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
-        miso: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
-        mosi: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
+        sck: impl Peripheral<P = impl SckPin<T>> + 'd,
+        mosi: impl Peripheral<P = impl MosiPin<T>> + 'd,
+        miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
         config: Config,
     ) -> Self {
 
-        into_ref!(spi, miso, mosi, irq);
+        into_ref!(spi, sck, miso, mosi, irq);
 
         irq.set_handler(Self::on_interrupt);
         irq.unpend();
@@ -158,6 +155,17 @@ impl<'d, T: Instance> Spim<'d, T>
 
         // enable the clock to the SPI peripheral
         T::enable();
+
+        let pclk = T::frequency();
+        let prescaler = compute_baud_rate(pclk, config.target_baud);
+        let baud_rate = pclk / prescaler;
+        info!("SPI buad_rate: {}", baud_rate);
+
+        let gpio_speed = crate::gpio::Speed::from(baud_rate);
+
+        sck.set_as_output(crate::gpio::OutputType::AFPushPull, gpio_speed);
+        miso.set_as_input(crate::gpio::Pull::None);
+        mosi.set_as_output(crate::gpio::OutputType::AFPushPull, gpio_speed);
 
         let r = T::regs();
         r.ctl0.write(|w| {
@@ -176,7 +184,7 @@ impl<'d, T: Instance> Spim<'d, T>
                 Endian::LSB => w.lf().set_bit(),
             };
 
-            let w = w.psc().bits(u8::from(config.clk_prescaler));
+            let w = w.psc().bits(u8::from(prescaler));
 
             // config for master mode full-duplex
             let w = w.mstmod().set_bit();
@@ -188,18 +196,9 @@ impl<'d, T: Instance> Spim<'d, T>
             w
         });
 
-        let gpio_speed = crate::gpio::Speed::from(T::frequency());
+        
 
-        let mut sck = crate::gpio::Flex::new(sck);
-        sck.set_as_output(crate::gpio::OutputType::AFPushPull, gpio_speed);
-
-        let mut miso = crate::gpio::Flex::new(miso);
-        miso.set_as_input(crate::gpio::Pull::None);
-
-        let mut mosi = crate::gpio::Flex::new(mosi);
-        mosi.set_as_output(crate::gpio::OutputType::AFPushPull, gpio_speed);
-
-        Self { _p: spi }
+        Self { _p: spi, sck: sck.map_into(), mosi: mosi.map_into(), miso: miso.map_into() }
     }
 
     fn on_interrupt(_: *mut()) {

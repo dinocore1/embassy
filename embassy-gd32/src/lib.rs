@@ -26,6 +26,7 @@ mod chip;
 pub(crate) use chip::pac;
 
 pub use chip::Peripherals;
+pub use chip::peripherals;
 
 pub mod interrupt {
     pub use cortex_m::interrupt::{CriticalSection, Mutex};

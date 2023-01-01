@@ -140,58 +140,12 @@ impl<'d, T: Pin> Flex<'d, T> {
 
     #[inline]
     pub fn set_as_input(&mut self, pull: Pull) {
-        critical_section::with(|_|  {
-            let r = self.pin.block();
-            let n = self.pin.pin();
-
-            let mode_value = match pull {
-                Pull::None => 0b0100_u32,
-                Pull::Up => {
-                    r.octl.modify(|r, w| unsafe { w.bits(r.bits() | (1 << n)) });
-                    0b1000_u32
-                },
-                Pull::Down => {
-                    r.octl.modify(|r, w| unsafe { w.bits(r.bits() & !(1 << n)) });
-                    0b1000_u32
-                },
-            };
-            
-            if n <= 7 {
-                r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
-            } else {
-                r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
-            }
-        });
-        
+        self.set_as_input(pull);
     }
 
     #[inline]
     pub fn set_as_output(&mut self, out_type: OutputType, speed: Speed) {
-        critical_section::with(|_|  {
-            let r = self.pin.block();
-            let n = self.pin.pin();
-
-            let mode_value = match out_type {
-                OutputType::GPIOPushPull => 0b0000_u32,
-                OutputType::GPIOOpenDrain => 0b0100_u32,
-                OutputType::AFPushPull => 0b1000_u32,
-                OutputType::AFOpenDrain => 0b1100_u32,
-            };
-
-            let mode_value = match speed {
-                Speed::Low => mode_value | 0b01,
-                Speed::Medium => mode_value | 0b10,
-                Speed::High | Speed::VeryHigh => mode_value | 0b11,
-            };
-
-            if n <= 7 {
-                r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
-            } else {
-                r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
-            }
-
-        });
-
+        self.set_as_output(out_type, speed);
     }
 
     #[inline]
@@ -274,12 +228,73 @@ pub(crate) mod sealed {
             }
         }
 
+        #[inline]
+        fn set_as_input(&mut self, pull: Pull) {
+            critical_section::with(|_|  {
+                let r = self.block();
+                let n = self.pin();
+
+                let mode_value = match pull {
+                    Pull::None => 0b0100_u32,
+                    Pull::Up => {
+                        r.octl.modify(|r, w| unsafe { w.bits(r.bits() | (1 << n)) });
+                        0b1000_u32
+                    },
+                    Pull::Down => {
+                        r.octl.modify(|r, w| unsafe { w.bits(r.bits() & !(1 << n)) });
+                        0b1000_u32
+                    },
+                };
+                
+                if n <= 7 {
+                    r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
+                } else {
+                    r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
+                }
+            });
+            
+        }
+
+        #[inline]
+        fn set_as_output(&mut self, out_type: OutputType, speed: Speed) {
+            critical_section::with(|_|  {
+                let r = self.block();
+                let n = self.pin();
+
+                let mode_value = match out_type {
+                    OutputType::GPIOPushPull => 0b0000_u32,
+                    OutputType::GPIOOpenDrain => 0b0100_u32,
+                    OutputType::AFPushPull => 0b1000_u32,
+                    OutputType::AFOpenDrain => 0b1100_u32,
+                };
+
+                let mode_value = match speed {
+                    Speed::Low => mode_value | 0b01,
+                    Speed::Medium => mode_value | 0b10,
+                    Speed::High | Speed::VeryHigh => mode_value | 0b11,
+                };
+
+                if n <= 7 {
+                    r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
+                } else {
+                    r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
+                }
+
+            });
+
+        }
+
     }
 
 }
 
-pub trait Pin: Peripheral<P = Self> + sealed::Pin + Sized + 'static {
-
+pub trait Pin: Peripheral<P = Self> + Into<AnyPin> + sealed::Pin + Sized + 'static {
+    #[inline]
+    fn degrade(self) -> AnyPin {
+        AnyPin {
+            pin_port: self.pin_port(),
+        }
+    }
 }
 
 pub struct AnyPin {
@@ -302,6 +317,12 @@ macro_rules! impl_pin {
             #[inline]
             fn pin_port(&self) -> u8 {
                 $port_num * 16 + $pin_num
+            }
+        }
+
+        impl From<peripherals::$name> for AnyPin {
+            fn from(x: peripherals::$name) -> Self {
+                x.degrade()
             }
         }
         

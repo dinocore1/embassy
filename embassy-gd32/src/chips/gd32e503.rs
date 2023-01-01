@@ -3,6 +3,9 @@ pub(crate) use gd32e5::gd32e503 as pac;
 
 pub const FLASH_SIZE: usize = 512 * 1024;
 
+use crate::gpio::Pin;
+use crate::gpio::AnyPin;
+
 embassy_hal_common::peripherals! {
     PMU,
     RTC,
@@ -102,6 +105,14 @@ impl_pin!(PB12, 1, 12);
 impl_pin!(PB13, 1, 13);
 impl_pin!(PB14, 1, 14);
 impl_pin!(PB15, 1, 15);
+
+pin_trait_impl!(crate::spi::SckPin, SPI0, PA5);
+pin_trait_impl!(crate::spi::MisoPin, SPI0, PA6);
+pin_trait_impl!(crate::spi::MosiPin, SPI0, PA7);
+
+pin_trait_impl!(crate::spi::SckPin, SPI1, PB13);
+pin_trait_impl!(crate::spi::MisoPin, SPI1, PB14);
+pin_trait_impl!(crate::spi::MosiPin, SPI1, PB15);
 
 impl_spi!(SPI0, SPI0, SPI0);
 impl_spi!(SPI1, SPI1, SPI1);
