@@ -134,6 +134,12 @@ impl_dma_channel!(DMA1_CH2, DMA1, 2);
 impl_dma_channel!(DMA1_CH3, DMA1, 3);
 impl_dma_channel!(DMA1_CH4, DMA1, 4);
 
+dma_trait_impl!(crate::spi::TxDma, SPI0, DMA0_CH2);
+dma_trait_impl!(crate::spi::RxDma, SPI0, DMA0_CH1);
+
+dma_trait_impl!(crate::spi::TxDma, SPI1, DMA0_CH4);
+dma_trait_impl!(crate::spi::RxDma, SPI1, DMA0_CH3);
+
 pub mod irqs {
     use embassy_cortex_m::interrupt::_export::declare;
     use crate::pac::Interrupt as InterruptEnum;

@@ -18,7 +18,14 @@ use self::sealed::WordSize;
 pub enum Error {
     BufLen,
     Overrun,
+    DMAError(crate::dma::Error)
 
+}
+
+impl From<crate::dma::Error> for Error {
+    fn from(err: crate::dma::Error) -> Error {
+        Error::DMAError(err)
+    }
 }
 
 pub struct Config {
@@ -251,8 +258,6 @@ impl<'d, T: Instance> Spim<'d, T>
     fn on_interrupt(_: *mut()) {
         let r = T::regs();
         let s = T::state();
-
-        
     }
 
     fn set_word_size(&mut self, word_size: crate::pac::spi0::ctl0::FF16_A) {
@@ -264,6 +269,45 @@ impl<'d, T: Instance> Spim<'d, T>
         r.ctl0.modify(|_, w| w.ff16().variant(word_size));
         self.current_word_size = word_size;
 
+    }
+
+    pub async fn transfer<'a, W, Tx, Rx>(
+        &mut self,
+        tx_dma: PeripheralRef<'a, Tx>,
+        rx_dma: PeripheralRef<'a, Rx>,
+        tx: &[W],
+        rx: &mut [W]) -> Result<(), Error>
+    where W: Word,
+        Tx: TxDma<T>,
+        Rx: RxDma<T>,
+    {
+        let regs = T::regs();
+
+        let count = tx.len();
+        if count != rx.len() {
+            return Err(Error::BufLen);
+        }
+        let count: u16 = count.try_into().map_err(|_| Error::BufLen)?;
+
+        // disable SPI
+        regs.ctl0.modify(|_, w| w.spien().clear_bit());
+
+        // configure DMA transfers
+        let dma_write = crate::dma::write(tx_dma, tx.as_ptr(), regs.data.as_ptr(), count);
+        let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
+
+        // enable DMA transfer mode
+        regs.ctl1.modify(|_, w| 
+            w
+            .dmaten().set_bit()
+            .dmaren().set_bit()
+        );
+
+        // enable SPI to begin transfer
+        regs.ctl0.modify(|_, w| w.spien().set_bit());
+
+        futures::try_join!(dma_write, dma_read)?;
+        Ok(())
     }
 
     pub fn blocking_transfer_in_place<W>(&mut self, buf: &mut[W]) -> Result<(), Error>
@@ -293,24 +337,6 @@ impl<'d, T: Instance> Spim<'d, T>
         }
 
         Ok(())
-    }
-
-    pub async fn transfer(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<(), Error> {
-        if tx.len() != rx.len() {
-            return Err(Error::BufLen)
-        }
-
-        // poll_fn(|cx| {
-        //     let regs = T::regs();
-        //     let r = regs.
-        //     r.
-
-        //     todo!()
-
-
-        // }).await;
-
-        todo!()
     }
 
 
@@ -369,13 +395,16 @@ pub(crate) mod sealed {
 
 }
 
-pub trait Word: Copy + 'static + sealed::Word + Default {}
+pub trait Word: Copy + 'static + sealed::Word + crate::dma::Word + Default {}
 impl Word for u8 {}
 impl Word for u16 {}
 
 pin_trait!(SckPin, Instance);
 pin_trait!(MosiPin, Instance);
 pin_trait!(MisoPin, Instance);
+
+dma_trait!(TxDma, Instance);
+dma_trait!(RxDma, Instance);
 
 pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLPeripherial + 'static {
     type Interrupt: Interrupt;
