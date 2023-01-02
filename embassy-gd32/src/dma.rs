@@ -3,6 +3,7 @@
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+
 use embassy_hal_common::{into_ref, PeripheralRef};
 
 use crate::chip::peripherals;
@@ -18,7 +19,7 @@ pub(crate) mod waker {
 
     unsafe impl Send for DmaWaker {}
     unsafe impl Sync for DmaWaker {}
-    
+
     impl DmaWaker {
         pub(crate) const fn new() -> Self {
             Self {
@@ -28,7 +29,7 @@ pub(crate) mod waker {
 
         pub fn register<'a>(&self, w: &Waker, cs: critical_section::CriticalSection<'a>) {
             let waker = unsafe { &mut *self.waker.get() };
-            
+
             match waker {
                 None => {
                     *waker = Some(w.clone());
@@ -40,7 +41,6 @@ pub(crate) mod waker {
                     }
                 }
             }
-
         }
 
         pub fn wake(&self) {
@@ -58,7 +58,7 @@ pub(crate) mod waker {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
-    TransferError
+    TransferError,
 }
 
 pub struct Transfer<'a, C: Channel> {
@@ -72,63 +72,79 @@ impl<'a, C: Channel> Transfer<'a, C> {
     }
 }
 
-pub fn read<'a, C: Channel, S, D>(
-    ch: PeripheralRef<'a, C>,
-    src: *const S,
-    dest: *mut D,
-    count: u16
-) -> Transfer<'a, C>
+pub fn read<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16) -> Transfer<'a, C>
 where
- C: Channel,
- S: Word,
- D: Word,
+    C: Channel,
+    S: Word,
+    D: Word,
 {
     let mut ctrl_reg_val = 0;
     let ctrl_reg = unsafe { &*((&mut ctrl_reg_val) as *mut _ as *mut crate::pac::dma0::CH0CTL) };
 
-    ctrl_reg.write(|w| w
-        .mwidth().variant(D::width().into_p())
-        .pwidth().variant(S::width().into_p())
-        .mnaga().set_bit()
-        .dir().variant(crate::pac::dma0::ch0ctl::DIR_A::FROM_PERIPHERAL)
-        .ftfie().set_bit()
-        .chen().set_bit()
-    );
+    ctrl_reg.write(|w| {
+        w.mwidth()
+            .variant(D::width().into_p())
+            .pwidth()
+            .variant(S::width().into_p())
+            .mnaga()
+            .set_bit()
+            .dir()
+            .variant(crate::pac::dma0::ch0ctl::DIR_A::FROM_PERIPHERAL)
+            .ftfie()
+            .set_bit()
+            .chen()
+            .set_bit()
+    });
 
     unsafe {
-        configure_channel(C::Instance::regs(), C::number(), dest as *const (), src as *const (), ctrl_reg_val, count);
+        configure_channel(
+            C::Instance::regs(),
+            C::number(),
+            dest as *const (),
+            src as *const (),
+            ctrl_reg_val,
+            count,
+        );
     }
 
     into_ref!(ch);
     Transfer::new(ch)
 }
 
-pub fn write<'a, C: Channel, S, D>(
-    ch: PeripheralRef<'a, C>,
-    src: *const S,
-    dest: *mut D,
-    count: u16
-) -> Transfer<'a, C>
+pub fn write<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16) -> Transfer<'a, C>
 where
- C: Channel,
- S: Word,
- D: Word,
+    C: Channel,
+    S: Word,
+    D: Word,
 {
     let mut ctrl_reg_val = 0;
 
     let ctrl_reg = unsafe { &*(&mut ctrl_reg_val as *mut _ as *mut crate::pac::dma0::CH0CTL) };
 
-    ctrl_reg.write(|w| w
-        .mwidth().variant(S::width().into_p())
-        .pwidth().variant(D::width().into_p())
-        .mnaga().set_bit()
-        .dir().variant(crate::pac::dma0::ch0ctl::DIR_A::FROM_MEMORY)
-        .ftfie().set_bit()
-        .chen().set_bit()
-    );
+    ctrl_reg.write(|w| {
+        w.mwidth()
+            .variant(S::width().into_p())
+            .pwidth()
+            .variant(D::width().into_p())
+            .mnaga()
+            .set_bit()
+            .dir()
+            .variant(crate::pac::dma0::ch0ctl::DIR_A::FROM_MEMORY)
+            .ftfie()
+            .set_bit()
+            .chen()
+            .set_bit()
+    });
 
     unsafe {
-        configure_channel(C::Instance::regs(), C::number(), dest as *const (), src as *const (), ctrl_reg_val, count);
+        configure_channel(
+            C::Instance::regs(),
+            C::number(),
+            dest as *const (),
+            src as *const (),
+            ctrl_reg_val,
+            count,
+        );
     }
 
     into_ref!(ch);
@@ -142,7 +158,6 @@ unsafe fn configure_channel(
     per_addr: *const (),
     ctrl_reg_val: u32,
     count: u16,
-
 ) {
     let reg_base = instance_regs as *const _ as *mut u8;
     let membase_reg = reg_base.offset((0x14 * ch_num as isize) + 0x14).cast::<u32>();
@@ -174,21 +189,19 @@ impl<'a, C: Channel> Future for Transfer<'a, C> {
             if intf.bits() & gifx != 0 {
                 //clear all channel interrupt flags
                 let all_if = 0x0F_u32 << (4 * channel);
-                inst.intc.write(|w| unsafe { w.bits(all_if) } );
-    
+                inst.intc.write(|w| unsafe { w.bits(all_if) });
+
                 let errif = 1_u32 << (4 * channel + 3);
                 if intf.bits() & errif != 0 {
                     Poll::Ready(Err(Error::TransferError))
                 } else {
                     Poll::Ready(Ok(()))
                 }
-                
             } else {
                 C::Instance::wakers()[channel as usize].register(cx.waker(), cs);
                 Poll::Pending
             }
         })
-        
     }
 }
 
@@ -208,8 +221,6 @@ impl Width {
             Width::Bits32 => crate::pac::dma0::ch0ctl::PWIDTH_A::BITS32,
         }
     }
-
-    
 }
 
 impl From<Width> for u8 {
@@ -249,7 +260,6 @@ impl Word for u32 {
 }
 
 pub trait Instance: Peripheral<P = Self> + 'static {
-
     fn wakers() -> &'static [waker::DmaWaker];
 
     fn regs() -> &'static crate::pac::dma0::RegisterBlock;
@@ -263,12 +273,10 @@ pub trait Channel: Peripheral<P = Self> + 'static {
 
 macro_rules! impl_dma {
     ($type:ident, $pac_type:ident, $num_channels:expr) => {
-
         impl crate::dma::Instance for peripherals::$type {
-
             fn wakers() -> &'static [crate::dma::waker::DmaWaker] {
                 const NEW_AW: crate::dma::waker::DmaWaker = crate::dma::waker::DmaWaker::new();
-                static WAKERS: [crate::dma::waker::DmaWaker ; $num_channels] = [NEW_AW ; $num_channels];
+                static WAKERS: [crate::dma::waker::DmaWaker; $num_channels] = [NEW_AW; $num_channels];
                 &WAKERS
             }
 
@@ -276,13 +284,11 @@ macro_rules! impl_dma {
                 unsafe { &*(crate::pac::$pac_type::ptr() as *const crate::pac::dma0::RegisterBlock) }
             }
         }
-        
     };
 }
 
 macro_rules! impl_dma_channel {
     ($type:ident, $inst:ident, $ch:expr) => {
-
         impl crate::dma::Channel for peripherals::$type {
             type Instance = peripherals::$inst;
 
@@ -290,11 +296,8 @@ macro_rules! impl_dma_channel {
                 $ch
             }
         }
-
     };
 }
-
-
 
 #[interrupt]
 unsafe fn DMA0_CHANNEL0() {
@@ -372,4 +375,3 @@ unsafe fn DMA0_CHANNEL6() {
     }
     crate::chip::peripherals::DMA0::wakers()[6].wake();
 }
-

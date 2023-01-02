@@ -3,23 +3,23 @@
 use core::future::poll_fn;
 use core::ptr;
 
+use embassy_hal_common::{into_ref, PeripheralRef};
+pub use embedded_hal_02::spi as hal;
+use embedded_hal_02::spi::{Phase, Polarity};
+
+use self::sealed::{EnableGuard, WordSize};
 use crate::chip::peripherals;
 use crate::gpio::AnyPin;
-use crate::{Hertz, Peripheral};
 use crate::interrupt::{Interrupt, InterruptExt};
-pub use embedded_hal_02::spi as hal;
-use embassy_hal_common::{into_ref, PeripheralRef};
-use embedded_hal_02::spi::{Polarity, Phase};
 use crate::pac::spi0::RegisterBlock as Regs;
-use self::sealed::{WordSize, EnableGuard};
+use crate::{Hertz, Peripheral};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     BufLen,
     Overrun,
-    DMAError(crate::dma::Error)
-
+    DMAError(crate::dma::Error),
 }
 
 impl From<crate::dma::Error> for Error {
@@ -55,7 +55,7 @@ pub enum Prescaler {
     DIV2 = 0,
     DIV4 = 1,
     DIV8 = 2,
-    DIV16  = 3,
+    DIV16 = 3,
     DIV32 = 4,
     DIV64 = 5,
     DIV128 = 6,
@@ -149,7 +149,8 @@ fn spin_until_rx_ready(regs: &Regs) -> Result<(), Error> {
 }
 
 fn transfer_word<W>(regs: &Regs, tx_word: W) -> Result<W, Error>
-where W: Word
+where
+    W: Word,
 {
     spin_until_tx_ready(regs)?;
 
@@ -168,8 +169,7 @@ pub struct Spi<'d, T: Instance> {
     current_word_size: crate::pac::spi0::ctl0::FF16_A,
 }
 
-impl<'d, T: Instance> Spi<'d, T>
-{
+impl<'d, T: Instance> Spi<'d, T> {
     pub fn new_master(
         spi: impl Peripheral<P = T> + 'd,
         sck: impl Peripheral<P = impl SckPin<T>> + 'd,
@@ -177,7 +177,6 @@ impl<'d, T: Instance> Spi<'d, T>
         miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
         config: Config,
     ) -> Self {
-
         into_ref!(spi, sck, miso, mosi);
 
         // enable the clock to the SPI peripheral
@@ -221,7 +220,10 @@ impl<'d, T: Instance> Spi<'d, T>
             w
         });
 
-        Self { _p: spi, current_word_size: crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT }
+        Self {
+            _p: spi,
+            current_word_size: crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT,
+        }
     }
 
     pub fn new_slave(
@@ -231,7 +233,6 @@ impl<'d, T: Instance> Spi<'d, T>
         miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
         config: Config,
     ) -> Self {
-
         into_ref!(spi, sck, miso, mosi);
 
         // enable the clock to the SPI peripheral
@@ -268,7 +269,10 @@ impl<'d, T: Instance> Spi<'d, T>
             w
         });
 
-        Self { _p: spi, current_word_size: crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT }
+        Self {
+            _p: spi,
+            current_word_size: crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT,
+        }
     }
 
     // fn on_interrupt(_: *mut()) {
@@ -288,7 +292,6 @@ impl<'d, T: Instance> Spi<'d, T>
         let r = T::regs();
         r.ctl0.modify(|_, w| w.ff16().variant(word_size));
         self.current_word_size = word_size;
-
     }
 
     pub async fn transfer<'a, W, Tx, Rx>(
@@ -296,8 +299,10 @@ impl<'d, T: Instance> Spi<'d, T>
         tx_dma: PeripheralRef<'a, Tx>,
         rx_dma: PeripheralRef<'a, Rx>,
         tx: &[W],
-        rx: &mut [W]) -> Result<(), Error>
-    where W: Word,
+        rx: &mut [W],
+    ) -> Result<(), Error>
+    where
+        W: Word,
         Tx: TxDma<T>,
         Rx: RxDma<T>,
     {
@@ -314,11 +319,7 @@ impl<'d, T: Instance> Spi<'d, T>
         let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
 
         // enable DMA transfer mode
-        regs.ctl1.modify(|_, w| 
-            w
-            .dmaten().set_bit()
-            .dmaren().set_bit()
-        );
+        regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
 
         let _enable_guard = EnableGuard::new(regs);
 
@@ -326,8 +327,9 @@ impl<'d, T: Instance> Spi<'d, T>
         Ok(())
     }
 
-    pub fn blocking_transfer_in_place<W>(&mut self, buf: &mut[W]) -> Result<(), Error>
-    where W: Word,
+    pub fn blocking_transfer_in_place<W>(&mut self, buf: &mut [W]) -> Result<(), Error>
+    where
+        W: Word,
     {
         let regs = T::regs();
 
@@ -363,13 +365,12 @@ impl<'d, T: Instance> Spi<'d, T>
 
         Ok(())
     }
-
-
 }
 
 pub(crate) mod sealed {
-    use super::*;
     use embassy_sync::waitqueue::AtomicWaker;
+
+    use super::*;
 
     pub struct State {
         pub end_waker: AtomicWaker,
@@ -406,7 +407,7 @@ pub(crate) mod sealed {
     #[derive(Clone, Copy, PartialEq, PartialOrd)]
     pub enum WordSize {
         Bit8,
-        Bit16
+        Bit16,
     }
 
     impl WordSize {
@@ -421,32 +422,30 @@ pub(crate) mod sealed {
     pub struct EnableGuard<'a> {
         regs: &'a crate::pac::spi0::RegisterBlock,
     }
-    
+
     impl<'a> EnableGuard<'a> {
-    
         pub fn new(regs: &'a crate::pac::spi0::RegisterBlock) -> Self {
             let guard = Self { regs };
             guard.enable();
             guard
         }
-    
+
         pub fn enable(&self) {
             // enable SPI
             self.regs.ctl0.modify(|_, w| w.spien().set_bit());
         }
-    
+
         pub fn disable(&self) {
             // disable SPI
             self.regs.ctl0.modify(|_, w| w.spien().clear_bit());
         }
     }
-    
+
     impl<'a> Drop for EnableGuard<'a> {
         fn drop(&mut self) {
             self.disable();
         }
     }
-
 }
 
 pub trait Word: Copy + 'static + sealed::Word + crate::dma::Word + Default {}
@@ -466,7 +465,6 @@ pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLP
 
 macro_rules! impl_spi {
     ($type:ident, $pac_type:ident, $irq:ident) => {
-
         impl crate::spi::sealed::Instance for peripherals::$type {
             fn regs() -> &'static crate::pac::spi0::RegisterBlock {
                 unsafe { &*(crate::pac::$pac_type::ptr() as *const crate::pac::spi0::RegisterBlock) }
@@ -481,10 +479,8 @@ macro_rules! impl_spi {
         impl crate::spi::Instance for peripherals::$type {
             type Interrupt = crate::interrupt::$irq;
         }
-        
     };
 }
-
 
 impl crate::cctl::CCTLPeripherial for peripherals::SPI0 {
     fn frequency() -> crate::utils::Hertz {
@@ -523,5 +519,3 @@ impl crate::cctl::CCTLPeripherial for peripherals::SPI1 {
         rcu.apb1en.modify(|_, w| w.spi1en().clear_bit())
     }
 }
-
-

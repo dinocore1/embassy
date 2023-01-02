@@ -1,18 +1,15 @@
-
+use core::cell::{Cell, UnsafeCell};
 use core::ptr;
-use core::sync::atomic::{Ordering, AtomicU8};
-use core::cell::{UnsafeCell, Cell};
+use core::sync::atomic::{AtomicU8, Ordering};
 
-use crate::interrupt::{Interrupt, InterruptExt};
-use crate::{interrupt};
 use critical_section::CriticalSection;
-use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_time::driver::AlarmHandle;
-
-use embassy_time::driver::Driver;
-
 use defmt::{info, unwrap};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
+use embassy_time::driver::{AlarmHandle, Driver};
+
+use crate::interrupt;
+use crate::interrupt::{Interrupt, InterruptExt};
 
 fn rtc() -> &'static crate::pac::rtc::RegisterBlock {
     unsafe { &*crate::pac::RTC::ptr() }
@@ -23,7 +20,7 @@ const ALARM_COUNT: usize = 3;
 struct RtcDriver {
     state: Mutex<UnsafeCell<RtcState>>,
     alarm_count: AtomicU8,
-    alarms: Mutex<[AlarmState ; ALARM_COUNT]>,
+    alarms: Mutex<[AlarmState; ALARM_COUNT]>,
 }
 
 struct AlarmState {
@@ -35,7 +32,6 @@ struct AlarmState {
 unsafe impl Send for AlarmState {}
 
 impl AlarmState {
-
     const fn new() -> Self {
         Self {
             timestamp: Cell::new(u64::MAX),
@@ -52,7 +48,6 @@ struct RtcState {
 }
 
 impl RtcState {
-
     fn read_time(&mut self) -> u64 {
         let r = rtc();
 
@@ -77,12 +72,13 @@ impl RtcState {
 
 #[inline]
 fn read_counter(r: &crate::pac::rtc::RegisterBlock) -> u32 {
-    (r.cnth.read().cnt().bits() as u32) << 16 | 
-     r.cntl.read().cnt().bits() as u32
+    (r.cnth.read().cnt().bits() as u32) << 16 | r.cntl.read().cnt().bits() as u32
 }
 
 fn do_config<F>(f: F)
-where F: FnOnce() {
+where
+    F: FnOnce(),
+{
     let r = rtc();
 
     //wait for the LWOFF bit is 1
@@ -98,11 +94,9 @@ where F: FnOnce() {
 
     //wait for the LWOFF bit is 1
     while r.ctl.read().lwoff().bit_is_clear() {}
-
 }
 
 impl RtcDriver {
-
     fn init(&'static self) {
         let r = rtc();
 
@@ -110,17 +104,13 @@ impl RtcDriver {
         let pmu = unsafe { &*crate::pac::PMU::ptr() };
 
         //enable power control and backup interface clocks
-        rcu.apb1en.modify(|_, w| w.pmuen().set_bit()
-                                           .bkpien().set_bit()
-                                        );
-        
+        rcu.apb1en.modify(|_, w| w.pmuen().set_bit().bkpien().set_bit());
+
         //set backup domain write enable so we can turn on lxt and rtc
-        pmu.ctl0.write(|w| w.bkpwen().set_bit() );
+        pmu.ctl0.write(|w| w.bkpwen().set_bit());
 
         //set the rtc clock mux to lxtal and enable lxtal
-        rcu.bdctl.write(|w| w.rtcsrc().variant(0b01)
-                                        .lxtalen().set_bit()
-                                    );
+        rcu.bdctl.write(|w| w.rtcsrc().variant(0b01).lxtalen().set_bit());
 
         //wait for lxtal to become stable
         while rcu.bdctl.read().lxtalstb().bit_is_clear() {}
@@ -129,27 +119,21 @@ impl RtcDriver {
         rcu.bdctl.modify(|_, w| w.rtcen().set_bit());
 
         do_config(|| {
-
             // set the counter to zero
             r.cnth.write(|w| w.cnt().variant(0));
             r.cntl.write(|w| w.cnt().variant(0));
 
             //set the prescaler to zero
-            r.psch.write(|w|w.psc().variant(0));
-            r.pscl.write(|w|w.psc().variant(0));
+            r.psch.write(|w| w.psc().variant(0));
+            r.pscl.write(|w| w.psc().variant(0));
 
             //enable overflow and alarm interrupt
-            r.inten.write(|w| w
-                .ovie().set_bit()
-                .alrmie().set_bit()
-            );
-            
+            r.inten.write(|w| w.ovie().set_bit().alrmie().set_bit());
         });
 
         let irq = unsafe { interrupt::RTC::steal() };
         irq.set_priority(crate::interrupt::Priority::P1);
         irq.enable();
-
     }
 
     fn on_interrupt(&self) {
@@ -178,7 +162,6 @@ impl RtcDriver {
 
             self.reset_alarm(cs);
         });
-
     }
 
     fn get_alarm<'a>(&'a self, cs: CriticalSection<'a>, alarm: AlarmHandle) -> &'a AlarmState {
@@ -201,16 +184,14 @@ impl RtcDriver {
         let next_timestamp = self.get_next(cs);
 
         let alarm_value = (0x0000_0000_FFFF_FFFF & next_timestamp) as u32;
-        do_config(||{
+        do_config(|| {
             rtc.alrmh.write(|w| w.alrm().variant((alarm_value >> 16) as u16));
             rtc.alrml.write(|w| w.alrm().variant((0xFFFF & alarm_value) as u16));
         });
     }
-
 }
 
-unsafe impl Sync for RtcDriver {
-}
+unsafe impl Sync for RtcDriver {}
 
 impl Driver for RtcDriver {
     fn now(&self) -> u64 {
@@ -238,7 +219,7 @@ impl Driver for RtcDriver {
     fn set_alarm_callback(&self, alarm: embassy_time::driver::AlarmHandle, callback: fn(*mut ()), ctx: *mut ()) {
         critical_section::with(|cs| {
             let alarm = self.get_alarm(cs, alarm);
-            alarm.callback.set(callback as *const());
+            alarm.callback.set(callback as *const ());
             alarm.ctx.set(ctx);
         })
     }
@@ -250,7 +231,7 @@ impl Driver for RtcDriver {
             return false;
         }
 
-        critical_section::with(|cs|{
+        critical_section::with(|cs| {
             let alarm = self.get_alarm(cs, alarm);
             alarm.timestamp.set(timestamp);
 

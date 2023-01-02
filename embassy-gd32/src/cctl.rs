@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 
 use atomic_polyfill::{compiler_fence, Ordering};
 
-use crate::utils::{Hertz, ClockDivider, ClockMultiplier};
+use crate::utils::{ClockDivider, ClockMultiplier, Hertz};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ClockSrc {
@@ -150,9 +150,7 @@ impl Default for Config {
     }
 }
 
-mod sealed {
-
-}
+mod sealed {}
 
 pub trait CCTLPeripherial {
     fn frequency() -> crate::utils::Hertz;
@@ -181,10 +179,10 @@ fn enter_high_driver_mode() {
     let rcu = unsafe { &*crate::pac::RCU::ptr() };
 
     // enable the PMU clock
-    rcu.apb1en.modify(|_,w| w.pmuen().set_bit());
+    rcu.apb1en.modify(|_, w| w.pmuen().set_bit());
 
     // enable 1.1v high-drive mode for high-frequency CPU
-    pmu.ctl0.modify(|_, w|w.hden().set_bit());
+    pmu.ctl0.modify(|_, w| w.hden().set_bit());
 
     // wait for the high-drive ready flag
     while pmu.cs0.read().hdrf().bit_is_clear() {}
@@ -197,30 +195,26 @@ fn enter_high_driver_mode() {
 }
 
 pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config) {
-
     let pll_hz = match config.pll {
         PLLConfig::Off => {
             //disable the PLL
             rcu.ctl.modify(|_, w| w.pllen().clear_bit());
             Hertz::hz(0)
-        },
+        }
         PLLConfig::On(src, mul) => {
-
             // set the pll source
             let (pll_hz, pllsel) = match src {
                 PLLSource::IRC8MDiv2 => {
                     //wait for IRC8M is stable
                     while rcu.ctl.read().irc8mstb().bit_is_clear() {}
                     (Hertz::mhz(4) * mul, false)
-                },
+                }
                 PLLSource::HXTAL(hz, prediv) => {
                     //wait for HXTAL is stable
                     while rcu.ctl.read().hxtalstb().bit_is_clear() {}
                     (hz / prediv * mul, true)
-                },
-                PLLSource::IRC48M(prediv) => {
-                    (Hertz::mhz(48) / prediv * mul, true)
-                },
+                }
+                PLLSource::IRC48M(prediv) => (Hertz::mhz(48) / prediv * mul, true),
             };
 
             //set the multiplication factor
@@ -248,13 +242,12 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
                 }
 
                 let w = unsafe { w.bits(bits) };
-                
 
                 let w = match pllsel {
                     true => w.pllsel().set_bit(),
                     false => w.pllsel().clear_bit(),
                 };
-                
+
                 w
             });
 
@@ -265,20 +258,16 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
             while rcu.ctl.read().pllstb().bit_is_clear() {}
 
             pll_hz
-        },
+        }
     };
-    
+
     let (ck_sys_hz, scs_val) = match config.ck_sys {
-        ClockSrc::IRC8M => {
-            (Hertz::mhz(8), 0b00)
-        },
+        ClockSrc::IRC8M => (Hertz::mhz(8), 0b00),
         ClockSrc::HXTAL(hz) => {
             rcu.ctl.modify(|_, w| w.hxtalen().set_bit());
             (hz, 0b01)
-        },
-        ClockSrc::PLL => {
-            (pll_hz, 0b10)
-        },
+        }
+        ClockSrc::PLL => (pll_hz, 0b10),
     };
 
     assert!(ck_sys_hz <= Hertz::mhz(180));
@@ -295,11 +284,14 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     }
 
     //write the bus prescaler factors
-    rcu.cfg0.modify(|_, w| w
-            .ahbpsc().variant(ahb_psc_bits)
-            .apb1psc().variant(apb1_psc_bits)
-            .apb2psc().variant(apb2_psc_bits)
-        );
+    rcu.cfg0.modify(|_, w| {
+        w.ahbpsc()
+            .variant(ahb_psc_bits)
+            .apb1psc()
+            .variant(apb1_psc_bits)
+            .apb2psc()
+            .variant(apb2_psc_bits)
+    });
 
     let clocks = Clocks {
         sys: ck_sys_hz,
@@ -311,20 +303,15 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
 
     //Set the flash wait state before changing the clock freq
     if ck_ahb <= Hertz::mhz(36) {
-        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(0) } );
-
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(0) });
     } else if ck_ahb <= Hertz::mhz(73) {
-        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(1) } );
-
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(1) });
     } else if ck_ahb <= Hertz::mhz(108) {
-        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(2) } );
-
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(2) });
     } else if ck_ahb <= Hertz::mhz(144) {
-        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(3) } );
-
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(3) });
     } else if ck_ahb <= Hertz::mhz(180) {
-        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(4) } );
-
+        fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(4) });
     } else {
         panic!("invalid clock freq: {}", ck_ahb);
     }
@@ -337,8 +324,7 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
 
     info!("Clock freq: {}", clocks);
 
-    unsafe { CLOCK_FREQS.write(clocks); }
-
-
-
+    unsafe {
+        CLOCK_FREQS.write(clocks);
+    }
 }

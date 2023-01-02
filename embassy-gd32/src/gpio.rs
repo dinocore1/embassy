@@ -1,7 +1,7 @@
 #![macro_use]
 
-use crate::{Peripheral, into_ref, PeripheralRef, Hertz};
 use crate::pac::gpioa as gpio;
+use crate::{into_ref, Hertz, Peripheral, PeripheralRef};
 
 #[derive(Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -38,7 +38,7 @@ pub enum OutputType {
     GPIOPushPull,
     GPIOOpenDrain,
     AFPushPull,
-    AFOpenDrain
+    AFOpenDrain,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -180,7 +180,6 @@ impl<'d, T: Pin> Flex<'d, T> {
             Level::High => self.pin.set_high(),
         }
     }
-
 }
 
 pub(crate) mod sealed {
@@ -230,7 +229,7 @@ pub(crate) mod sealed {
 
         #[inline]
         fn set_as_input(&mut self, pull: Pull) {
-            critical_section::with(|_|  {
+            critical_section::with(|_| {
                 let r = self.block();
                 let n = self.pin();
 
@@ -239,25 +238,26 @@ pub(crate) mod sealed {
                     Pull::Up => {
                         r.octl.modify(|r, w| unsafe { w.bits(r.bits() | (1 << n)) });
                         0b1000_u32
-                    },
+                    }
                     Pull::Down => {
                         r.octl.modify(|r, w| unsafe { w.bits(r.bits() & !(1 << n)) });
                         0b1000_u32
-                    },
+                    }
                 };
-                
+
                 if n <= 7 {
-                    r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
+                    r.ctl0
+                        .modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
                 } else {
-                    r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
+                    r.ctl1
+                        .modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
                 }
             });
-            
         }
 
         #[inline]
         fn set_as_output(&mut self, out_type: OutputType, speed: Speed) {
-            critical_section::with(|_|  {
+            critical_section::with(|_| {
                 let r = self.block();
                 let n = self.pin();
 
@@ -275,17 +275,15 @@ pub(crate) mod sealed {
                 };
 
                 if n <= 7 {
-                    r.ctl0.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
+                    r.ctl0
+                        .modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n)) });
                 } else {
-                    r.ctl1.modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
+                    r.ctl1
+                        .modify(|r, w| unsafe { w.bits(set_mode(r.bits(), mode_value, n - 8)) });
                 }
-
             });
-
         }
-
     }
-
 }
 
 pub trait Pin: Peripheral<P = Self> + Into<AnyPin> + sealed::Pin + Sized + 'static {
@@ -325,7 +323,6 @@ macro_rules! impl_pin {
                 x.degrade()
             }
         }
-        
     };
 }
 
@@ -337,7 +334,7 @@ macro_rules! impl_gpio {
                 $port
             }
         }
-    }
+    };
 }
 
 pub enum GPIOPort {
@@ -347,7 +344,7 @@ pub enum GPIOPort {
     D,
     E,
     F,
-    G
+    G,
 }
 
 pub trait GPIO: Peripheral<P = Self> + Sized + 'static {
@@ -356,28 +353,26 @@ pub trait GPIO: Peripheral<P = Self> + Sized + 'static {
     fn enable(&self) {
         let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
         match self.port() {
-            GPIOPort::A => rcu.apb2en.modify(|_,w| w.paen().set_bit()),
-            GPIOPort::B => rcu.apb2en.modify(|_,w| w.pben().set_bit()),
-            GPIOPort::C => rcu.apb2en.modify(|_,w| w.pcen().set_bit()),
-            GPIOPort::D => rcu.apb2en.modify(|_,w| w.pden().set_bit()),
-            GPIOPort::E => rcu.apb2en.modify(|_,w| w.peen().set_bit()),
-            GPIOPort::F => rcu.apb2en.modify(|_,w| w.pfen().set_bit()),
-            GPIOPort::G => rcu.apb2en.modify(|_,w| w.pgen().set_bit()),
+            GPIOPort::A => rcu.apb2en.modify(|_, w| w.paen().set_bit()),
+            GPIOPort::B => rcu.apb2en.modify(|_, w| w.pben().set_bit()),
+            GPIOPort::C => rcu.apb2en.modify(|_, w| w.pcen().set_bit()),
+            GPIOPort::D => rcu.apb2en.modify(|_, w| w.pden().set_bit()),
+            GPIOPort::E => rcu.apb2en.modify(|_, w| w.peen().set_bit()),
+            GPIOPort::F => rcu.apb2en.modify(|_, w| w.pfen().set_bit()),
+            GPIOPort::G => rcu.apb2en.modify(|_, w| w.pgen().set_bit()),
         }
     }
 
     fn disable(&self) {
         let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
         match self.port() {
-            GPIOPort::A => rcu.apb2en.modify(|_,w| w.paen().clear_bit()),
-            GPIOPort::B => rcu.apb2en.modify(|_,w| w.pben().clear_bit()),
-            GPIOPort::C => rcu.apb2en.modify(|_,w| w.pcen().clear_bit()),
-            GPIOPort::D => rcu.apb2en.modify(|_,w| w.pden().clear_bit()),
-            GPIOPort::E => rcu.apb2en.modify(|_,w| w.peen().clear_bit()),
-            GPIOPort::F => rcu.apb2en.modify(|_,w| w.pfen().clear_bit()),
-            GPIOPort::G => rcu.apb2en.modify(|_,w| w.pgen().clear_bit()),
+            GPIOPort::A => rcu.apb2en.modify(|_, w| w.paen().clear_bit()),
+            GPIOPort::B => rcu.apb2en.modify(|_, w| w.pben().clear_bit()),
+            GPIOPort::C => rcu.apb2en.modify(|_, w| w.pcen().clear_bit()),
+            GPIOPort::D => rcu.apb2en.modify(|_, w| w.pden().clear_bit()),
+            GPIOPort::E => rcu.apb2en.modify(|_, w| w.peen().clear_bit()),
+            GPIOPort::F => rcu.apb2en.modify(|_, w| w.pfen().clear_bit()),
+            GPIOPort::G => rcu.apb2en.modify(|_, w| w.pgen().clear_bit()),
         }
     }
-
-
 }

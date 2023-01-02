@@ -1,10 +1,8 @@
-
 pub(crate) use gd32e5::gd32e503 as pac;
 
 pub const FLASH_SIZE: usize = 512 * 1024;
 
-use crate::gpio::Pin;
-use crate::gpio::AnyPin;
+use crate::gpio::{AnyPin, Pin};
 
 embassy_hal_common::peripherals! {
     PMU,
@@ -142,6 +140,7 @@ dma_trait_impl!(crate::spi::RxDma, SPI1, DMA0_CH3);
 
 pub mod irqs {
     use embassy_cortex_m::interrupt::_export::declare;
+
     use crate::pac::Interrupt as InterruptEnum;
 
     declare!(RTC);
@@ -162,5 +161,4 @@ pub mod irqs {
     declare!(DMA1_CHANNEL1);
     declare!(DMA1_CHANNEL2);
     declare!(DMA1_CHANNEL3_DMA1_CHANNEL4);
-
 }

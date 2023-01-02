@@ -1,6 +1,5 @@
 use core::ops::{Div, Mul};
 
-
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug, Eq)]
 pub struct Hertz(pub u32);
 
@@ -32,7 +31,7 @@ impl defmt::Format for Hertz {
 }
 
 pub trait ClockDivider {
-    fn divide(&self, hz: Hertz) -> Hertz;   
+    fn divide(&self, hz: Hertz) -> Hertz;
 }
 
 pub trait ClockMultiplier {
@@ -40,7 +39,9 @@ pub trait ClockMultiplier {
 }
 
 impl<D> Div<D> for Hertz
-where D: ClockDivider {
+where
+    D: ClockDivider,
+{
     type Output = Hertz;
 
     fn div(self, rhs: D) -> Self::Output {
@@ -49,7 +50,9 @@ where D: ClockDivider {
 }
 
 impl<M> Mul<M> for Hertz
-where M: ClockMultiplier {
+where
+    M: ClockMultiplier,
+{
     type Output = Hertz;
 
     fn mul(self, rhs: M) -> Self::Output {
@@ -68,7 +71,6 @@ impl ClockDivider for u32 {
         Hertz::hz(hz.0 / self)
     }
 }
-
 
 impl AsRef<u32> for Hertz {
     fn as_ref(&self) -> &u32 {
