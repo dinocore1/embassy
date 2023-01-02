@@ -32,10 +32,6 @@ impl PLLMul {
         assert!(mf > 1 && mf < 64);
         Self(mf)
     }
-
-    fn get_bits(&self) -> u8 {
-        self.0 - 2
-    }
 }
 
 impl ClockMultiplier for PLLMul {
@@ -90,7 +86,7 @@ impl AHBPreDiv {
 
 impl ClockDivider for AHBPreDiv {
     fn divide(&self, hz: Hertz) -> Hertz {
-        let (hz, bits) = self.operate(hz);
+        let (hz, _bits) = self.operate(hz);
         hz
     }
 }
@@ -118,7 +114,7 @@ impl APBPreDiv {
 
 impl ClockDivider for APBPreDiv {
     fn divide(&self, hz: Hertz) -> Hertz {
-        let (hz, bits) = self.operate(hz);
+        let (hz, _bits) = self.operate(hz);
         hz
     }
 }

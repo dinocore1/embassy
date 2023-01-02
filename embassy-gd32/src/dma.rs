@@ -6,8 +6,7 @@ use core::task::{Context, Poll};
 
 use embassy_hal_common::{into_ref, PeripheralRef};
 
-use crate::chip::peripherals;
-use crate::{interrupt, Hertz, Peripheral};
+use crate::{interrupt, Peripheral};
 
 pub(crate) mod waker {
     use core::cell::UnsafeCell;
@@ -27,7 +26,7 @@ pub(crate) mod waker {
             }
         }
 
-        pub fn register<'a>(&self, w: &Waker, cs: critical_section::CriticalSection<'a>) {
+        pub fn register<'a>(&self, w: &Waker, _cs: critical_section::CriticalSection<'a>) {
             let waker = unsafe { &mut *self.waker.get() };
 
             match waker {
@@ -44,7 +43,7 @@ pub(crate) mod waker {
         }
 
         pub fn wake(&self) {
-            let waker = critical_section::with(|cs| {
+            let waker = critical_section::with(|_| {
                 let waker = unsafe { &mut *self.waker.get() };
                 waker.take()
             });

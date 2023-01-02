@@ -9,7 +9,6 @@ use embedded_hal_02::spi::{Phase, Polarity};
 
 use self::sealed::{EnableGuard, WordSize};
 use crate::chip::peripherals;
-use crate::gpio::AnyPin;
 use crate::interrupt::{Interrupt, InterruptExt};
 use crate::pac::spi0::RegisterBlock as Regs;
 use crate::{Hertz, Peripheral};
@@ -369,8 +368,6 @@ impl<'d, T: Instance> Spi<'d, T> {
 
 pub(crate) mod sealed {
     use embassy_sync::waitqueue::AtomicWaker;
-
-    use super::*;
 
     pub struct State {
         pub end_waker: AtomicWaker,

@@ -140,12 +140,12 @@ impl<'d, T: Pin> Flex<'d, T> {
 
     #[inline]
     pub fn set_as_input(&mut self, pull: Pull) {
-        self.set_as_input(pull);
+        self.pin.set_as_input(pull);
     }
 
     #[inline]
     pub fn set_as_output(&mut self, out_type: OutputType, speed: Speed) {
-        self.set_as_output(out_type, speed);
+        self.pin.set_as_output(out_type, speed);
     }
 
     #[inline]
