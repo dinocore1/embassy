@@ -309,7 +309,8 @@ pub(crate) fn init(rcu: &crate::pac::RCU, fmc: &crate::pac::FMC, config: &Config
     } else if ck_ahb <= Hertz::mhz(180) {
         fmc.ws.modify(|_, w| unsafe { w.wscnt().bits(4) });
     } else {
-        panic!("invalid clock freq: {}", ck_ahb);
+        //panic!("invalid clock freq: {}", ck_ahb);
+        panic!();
     }
 
     // set clock mux

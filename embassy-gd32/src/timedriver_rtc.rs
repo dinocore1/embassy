@@ -3,7 +3,6 @@ use core::ptr;
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use critical_section::CriticalSection;
-use defmt::{info, unwrap};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
 use embassy_time::driver::{AlarmHandle, Driver};
