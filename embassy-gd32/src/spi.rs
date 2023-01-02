@@ -11,7 +11,7 @@ pub use embedded_hal_02::spi as hal;
 use embassy_hal_common::{into_ref, PeripheralRef};
 use embedded_hal_02::spi::{Polarity, Phase};
 use crate::pac::spi0::RegisterBlock as Regs;
-use self::sealed::WordSize;
+use self::sealed::{WordSize, EnableGuard};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -118,27 +118,6 @@ fn compute_baud_rate(pclk: Hertz, target: Hertz) -> Prescaler {
     val
 }
 
-pub struct Spis<'d, T: Instance> {
-    _p: PeripheralRef<'d, T>,
-}
-
-impl<'d, T: Instance> Spis<'d, T> {
-    pub fn new(
-        spi: impl Peripheral<P = T> + 'd,
-        irq: impl Peripheral<P = T::Interrupt> + 'd,
-        sck: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
-        miso: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
-        mosi: impl Peripheral<P = impl crate::gpio::Pin> + 'd,
-        config: Config,
-    ) -> Self {
-
-        into_ref!(spi);
-
-        Self { _p: spi }
-        
-    }
-}
-
 fn check_error_flags(sr: &crate::pac::spi0::stat::R) -> Result<(), Error> {
     if sr.txurerr().bit_is_set() {
         return Err(Error::Overrun);
@@ -184,30 +163,22 @@ where W: Word
     Ok(rx_word)
 }
 
-pub struct Spim<'d, T: Instance> {
+pub struct Spi<'d, T: Instance> {
     _p: PeripheralRef<'d, T>,
-    sck: PeripheralRef<'d, AnyPin>,
-    mosi: PeripheralRef<'d, AnyPin>,
-    miso: PeripheralRef<'d, AnyPin>,
     current_word_size: crate::pac::spi0::ctl0::FF16_A,
 }
 
-impl<'d, T: Instance> Spim<'d, T>
+impl<'d, T: Instance> Spi<'d, T>
 {
-    pub fn new(
+    pub fn new_master(
         spi: impl Peripheral<P = T> + 'd,
-        irq: impl Peripheral<P = T::Interrupt> + 'd,
         sck: impl Peripheral<P = impl SckPin<T>> + 'd,
         mosi: impl Peripheral<P = impl MosiPin<T>> + 'd,
         miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
         config: Config,
     ) -> Self {
 
-        into_ref!(spi, sck, miso, mosi, irq);
-
-        irq.set_handler(Self::on_interrupt);
-        irq.unpend();
-        irq.enable();
+        into_ref!(spi, sck, miso, mosi);
 
         // enable the clock to the SPI peripheral
         T::enable();
@@ -247,18 +218,67 @@ impl<'d, T: Instance> Spim<'d, T>
             let w = w.ro().clear_bit();
             let w = w.bden().clear_bit();
 
-            let w = w.spien().set_bit();
+            w
+        });
+
+        Self { _p: spi, current_word_size: crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT }
+    }
+
+    pub fn new_slave(
+        spi: impl Peripheral<P = T> + 'd,
+        sck: impl Peripheral<P = impl SckPin<T>> + 'd,
+        mosi: impl Peripheral<P = impl MosiPin<T>> + 'd,
+        miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
+        config: Config,
+    ) -> Self {
+
+        into_ref!(spi, sck, miso, mosi);
+
+        // enable the clock to the SPI peripheral
+        T::enable();
+
+        let gpio_speed = crate::gpio::Speed::from(config.target_baud);
+
+        sck.set_as_input(crate::gpio::Pull::None);
+        miso.set_as_output(crate::gpio::OutputType::AFPushPull, gpio_speed);
+        mosi.set_as_input(crate::gpio::Pull::None);
+
+        let r = T::regs();
+        r.ctl0.write(|w| {
+            let w = match config.mode.polarity {
+                Polarity::IdleLow => w.ckpl().clear_bit(),
+                Polarity::IdleHigh => w.ckpl().set_bit(),
+            };
+
+            let w = match config.mode.phase {
+                Phase::CaptureOnFirstTransition => w.ckph().clear_bit(),
+                Phase::CaptureOnSecondTransition => w.ckph().set_bit(),
+            };
+
+            let w = match config.endian {
+                Endian::MSB => w.lf().clear_bit(),
+                Endian::LSB => w.lf().set_bit(),
+            };
+
+            // config for save mode full-duplex
+            let w = w.mstmod().clear_bit();
+            let w = w.ro().clear_bit();
+            let w = w.bden().clear_bit();
 
             w
         });
 
-        Self { _p: spi, sck: sck.map_into(), mosi: mosi.map_into(), miso: miso.map_into(), current_word_size: crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT }
+        Self { _p: spi, current_word_size: crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT }
     }
 
-    fn on_interrupt(_: *mut()) {
-        let r = T::regs();
-        let s = T::state();
-    }
+    // fn on_interrupt(_: *mut()) {
+    //     let r = T::regs();
+    //     let s = T::state();
+    // }
+
+    // irq.set_handler(Self::on_interrupt);
+    // irq.unpend();
+    // irq.enable();
 
     fn set_word_size(&mut self, word_size: crate::pac::spi0::ctl0::FF16_A) {
         if self.current_word_size == word_size {
@@ -289,9 +309,6 @@ impl<'d, T: Instance> Spim<'d, T>
         }
         let count: u16 = count.try_into().map_err(|_| Error::BufLen)?;
 
-        // disable SPI
-        regs.ctl0.modify(|_, w| w.spien().clear_bit());
-
         // configure DMA transfers
         let dma_write = crate::dma::write(tx_dma, tx.as_ptr(), regs.data.as_ptr(), count);
         let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
@@ -303,8 +320,7 @@ impl<'d, T: Instance> Spim<'d, T>
             .dmaren().set_bit()
         );
 
-        // enable SPI to begin transfer
-        regs.ctl0.modify(|_, w| w.spien().set_bit());
+        let _enable_guard = EnableGuard::new(regs);
 
         futures::try_join!(dma_write, dma_read)?;
         Ok(())
@@ -313,11 +329,16 @@ impl<'d, T: Instance> Spim<'d, T>
     pub fn blocking_transfer_in_place<W>(&mut self, buf: &mut[W]) -> Result<(), Error>
     where W: Word,
     {
+        let regs = T::regs();
+
         self.set_word_size(W::FF16);
 
+        let _enable_guard = EnableGuard::new(regs);
+
         for word in buf.iter_mut() {
-            *word = transfer_word(T::regs(), *word)?;
+            *word = transfer_word(regs, *word)?;
         }
+
         Ok(())
     }
 
@@ -325,12 +346,16 @@ impl<'d, T: Instance> Spim<'d, T>
     where
         W: Word,
     {
+        let regs = T::regs();
+
         self.set_word_size(W::FF16);
+
+        let _enable_guard = EnableGuard::new(regs);
 
         let len = tx.len().max(rx.len());
         for i in 0..len {
             let wb = rx.get(i).copied().unwrap_or_default();
-            let rb = transfer_word(T::regs(), wb)?;
+            let rb = transfer_word(regs, wb)?;
             if let Some(r) = rx.get_mut(i) {
                 *r = rb;
             }
@@ -390,6 +415,35 @@ pub(crate) mod sealed {
                 WordSize::Bit8 => crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT,
                 WordSize::Bit16 => crate::pac::spi0::ctl0::FF16_A::SIXTEEN_BIT,
             }
+        }
+    }
+
+    pub struct EnableGuard<'a> {
+        regs: &'a crate::pac::spi0::RegisterBlock,
+    }
+    
+    impl<'a> EnableGuard<'a> {
+    
+        pub fn new(regs: &'a crate::pac::spi0::RegisterBlock) -> Self {
+            let guard = Self { regs };
+            guard.enable();
+            guard
+        }
+    
+        pub fn enable(&self) {
+            // enable SPI
+            self.regs.ctl0.modify(|_, w| w.spien().set_bit());
+        }
+    
+        pub fn disable(&self) {
+            // disable SPI
+            self.regs.ctl0.modify(|_, w| w.spien().clear_bit());
+        }
+    }
+    
+    impl<'a> Drop for EnableGuard<'a> {
+        fn drop(&mut self) {
+            self.disable();
         }
     }
 
