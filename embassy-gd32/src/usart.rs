@@ -9,25 +9,21 @@ pub enum Oversample {
 
 fn calc_bauddiv(pclk: Hertz, baud: u32, oversample: Oversample) -> u16 {
 
-    let (intdiv, fradiv) = match oversample {
+    let div = match oversample {
         Oversample::SixteenTimes => {
-            let div = (pclk.0 + baud/2) / baud;
-            let intdiv = div & 0xfff0;
-            let fradiv = div & 0xf;
-
-            (intdiv, fradiv)
+            (pclk.0 + baud/2) / baud
         }
 
         Oversample::EightTimes => {
-            let div = ((pclk.0 + baud/2) << 1) / baud;
-            let intdiv = div & 0xfff0;
-            let fradiv = div & 0xf;
-
-            (intdiv, fradiv)
+            ((pclk.0 + baud/2) << 1) / baud
         }
     };
 
-    (intdiv as u16) | (fradiv as u16)
+    // let intdiv = div & 0xfff0;
+    // let fradiv = div & 0xf;
+
+    // (intdiv as u16) | (fradiv as u16)
+    div as u16
 }
 
 #[cfg(test)]
