@@ -19,6 +19,8 @@ pub mod spi;
 
 pub mod dma;
 
+pub mod usart;
+
 #[cfg_attr(feature = "gd32e503", path = "chips/gd32e503.rs")]
 mod chip;
 pub(crate) use chip::pac;
