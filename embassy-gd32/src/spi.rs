@@ -293,28 +293,60 @@ impl<'d, T: Instance> Spi<'d, T> {
         self.current_word_size = word_size;
     }
 
-    pub async fn read<'a, W, Rx>(
+    pub async fn read<'a, W, Tx, Rx>(
         &mut self,
+        tx_dma: PeripheralRef<'a, Tx>,
         rx_dma: PeripheralRef<'a, Rx>,
         rx: &mut [W],
     ) -> Result<(), Error>
     where
         W: Word,
+        Tx: TxDma<T>,
         Rx: RxDma<T>,
     {
-        todo!()
+        let regs = T::regs();
+        let count: u16 = rx.len().try_into().map_err(|_| Error::BufLen)?;
+
+        // configure DMA transfers
+        let dma_write = crate::dma::write_repeated(tx_dma, W::default(), regs.data.as_ptr(), count);
+        let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
+
+        // enable DMA transfer mode
+        regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
+
+        let _enable_guard = EnableGuard::new(regs);
+
+        futures::try_join!(dma_write, dma_read)?;
+        Ok(())
     }
 
-    pub async fn write<'a, W, Tx>(
+    pub async fn write<'a, W, Tx, Rx>(
         &mut self,
         tx_dma: PeripheralRef<'a, Tx>,
+        rx_dma: PeripheralRef<'a, Rx>,
         tx: &[W],
     ) -> Result<(), Error>
     where
         W: Word,
         Tx: TxDma<T>,
+        Rx: RxDma<T>,
     {
-        todo!()
+        let regs = T::regs();
+        let count: u16 = tx.len().try_into().map_err(|_| Error::BufLen)?;
+
+        let mut rx = [0_u8];
+
+        // configure DMA transfers
+        let dma_write = crate::dma::write(tx_dma, tx.as_ptr(), regs.data.as_ptr(), count);
+        let dma_read = crate::dma::read_repeated(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
+
+        // enable DMA transfer mode
+        regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
+
+        let _enable_guard = EnableGuard::new(regs);
+
+        futures::try_join!(dma_write, dma_read)?;
+        Ok(())
     }
 
     pub async fn transfer<'a, W, Tx, Rx>(

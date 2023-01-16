@@ -71,7 +71,28 @@ impl<'a, C: Channel> Transfer<'a, C> {
     }
 }
 
+/// Read from a peripheral device. The `src` address is the memory-mapped peripheral register address to read from.
+/// The `dest` address is the memory buffer to write to.
 pub fn read<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16) -> Transfer<'a, C>
+where
+    C: Channel,
+    S: Word,
+    D: Word,
+{
+    read_inner(ch, src, dest, count, crate::pac::dma0::ch0ctl::PNAGA_A::INCREMENT)
+}
+
+/// Repeatedly read from a peripheral device.
+pub fn read_repeated<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16) -> Transfer<'a, C>
+where
+    C: Channel,
+    S: Word,
+    D: Word,
+{
+    read_inner(ch, src, dest, count, crate::pac::dma0::ch0ctl::PNAGA_A::FIXED)
+}
+
+fn read_inner<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16, mnaga: crate::pac::dma0::ch0ctl::PNAGA_A) -> Transfer<'a, C>
 where
     C: Channel,
     S: Word,
@@ -85,8 +106,7 @@ where
             .variant(D::width().into_p())
             .pwidth()
             .variant(S::width().into_p())
-            .mnaga()
-            .set_bit()
+            .mnaga().variant(mnaga)
             .dir()
             .variant(crate::pac::dma0::ch0ctl::DIR_A::FROM_PERIPHERAL)
             .ftfie()
@@ -110,7 +130,30 @@ where
     Transfer::new(ch)
 }
 
+/// Write to a peripheral device. The `src` address should be the memory buffer to read from. The `dest` should be the 
+/// memory-mapped peripheral register address to write to.
 pub fn write<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16) -> Transfer<'a, C>
+where
+    C: Channel,
+    S: Word,
+    D: Word,
+{
+    write_inner(ch, src, dest, count, crate::pac::dma0::ch0ctl::PNAGA_A::INCREMENT)
+}
+
+/// Repeatably write the same value to a peripheral device. The `dest` should be the 
+/// memory-mapped peripheral register address to write to.
+pub fn write_repeated<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, value: S, dest: *mut D, count: u16) -> Transfer<'a, C>
+where
+    C: Channel,
+    S: Word,
+    D: Word,
+{
+    let src = [value];
+    write_inner(ch, src.as_ptr(), dest, count, crate::pac::dma0::ch0ctl::PNAGA_A::FIXED)
+}
+
+fn write_inner<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16, mnaga: crate::pac::dma0::ch0ctl::PNAGA_A) -> Transfer<'a, C>
 where
     C: Channel,
     S: Word,
@@ -125,8 +168,7 @@ where
             .variant(S::width().into_p())
             .pwidth()
             .variant(D::width().into_p())
-            .mnaga()
-            .set_bit()
+            .mnaga().variant(mnaga)
             .dir()
             .variant(crate::pac::dma0::ch0ctl::DIR_A::FROM_MEMORY)
             .ftfie()
