@@ -293,6 +293,30 @@ impl<'d, T: Instance> Spi<'d, T> {
         self.current_word_size = word_size;
     }
 
+    pub async fn read<'a, W, Rx>(
+        &mut self,
+        rx_dma: PeripheralRef<'a, Rx>,
+        rx: &mut [W],
+    ) -> Result<(), Error>
+    where
+        W: Word,
+        Rx: RxDma<T>,
+    {
+        todo!()
+    }
+
+    pub async fn write<'a, W, Tx>(
+        &mut self,
+        tx_dma: PeripheralRef<'a, Tx>,
+        tx: &[W],
+    ) -> Result<(), Error>
+    where
+        W: Word,
+        Tx: TxDma<T>,
+    {
+        todo!()
+    }
+
     pub async fn transfer<'a, W, Tx, Rx>(
         &mut self,
         tx_dma: PeripheralRef<'a, Tx>,
