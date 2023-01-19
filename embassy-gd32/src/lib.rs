@@ -42,6 +42,9 @@ pub use embassy_hal_common::{into_ref, Peripheral, PeripheralRef};
 #[cfg(feature = "timedriver-rtc")]
 pub use embassy_time::*;
 
+pub use cortex_m;
+pub use cortex_m_rt;
+
 pub struct Config {
     pub clock_cfg: cctl::Config,
 }
