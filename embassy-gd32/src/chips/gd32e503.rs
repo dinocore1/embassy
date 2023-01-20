@@ -138,6 +138,17 @@ dma_trait_impl!(crate::spi::RxDma, SPI0, DMA0_CH1);
 dma_trait_impl!(crate::spi::TxDma, SPI1, DMA0_CH4);
 dma_trait_impl!(crate::spi::RxDma, SPI1, DMA0_CH3);
 
+impl_usart!(USART0, USART0);
+impl_usart!(USART1, USART1);
+
+pin_trait_impl!(crate::usart::TxPin, USART1, PA2);
+pin_trait_impl!(crate::usart::RxPin, USART1, PA3);
+
+pin_trait_impl!(crate::usart::TxPin, USART0, PA9);
+pin_trait_impl!(crate::usart::RxPin, USART0, PA10);
+pin_trait_impl!(crate::usart::TxPin, USART0, PB6);
+pin_trait_impl!(crate::usart::RxPin, USART0, PB7);
+
 pub mod irqs {
     use embassy_cortex_m::interrupt::_export::declare;
 
