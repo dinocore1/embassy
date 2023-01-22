@@ -1,4 +1,6 @@
-use core::ops::{Div, Mul};
+use core::{ops::{Div, Mul}, task::{Waker, Context, Poll}};
+
+use critical_section::CriticalSection;
 
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug, Eq)]
 pub struct Hertz(pub u32);
@@ -75,5 +77,47 @@ impl ClockDivider for u32 {
 impl AsRef<u32> for Hertz {
     fn as_ref(&self) -> &u32 {
         &self.0
+    }
+}
+
+#[inline(always)]
+unsafe fn very_bad_function<T>(reference: &T) -> &mut T {
+    let const_ptr = reference as *const T;
+    let mut_ptr = const_ptr as *mut T;
+    &mut *mut_ptr
+}
+
+pub struct InterruptWaker {
+    waker: Option<Waker>,
+}
+
+impl InterruptWaker {
+    pub const fn new() -> Self {
+        Self {
+            waker: None,
+        }
+    }
+
+    pub fn signal(&self) {
+        let waker = critical_section::with(|_cs| {
+            let this = unsafe { very_bad_function(self) };
+            this.waker.take()
+        });
+        if let Some(waker) = waker {
+            waker.wake();
+        }
+    }
+
+    pub fn register(&self, cx: &mut Context, _cs: CriticalSection) {
+        let this = unsafe { very_bad_function(self) };
+
+        if let Some(waker) = this.waker.take() {
+            if !waker.will_wake(cx.waker()) {
+                // two different threads are waiting on this. Two threads will fight
+                // but at least functionality will be correct.
+                waker.wake();
+            }
+        }
+        this.waker = Some(cx.waker().clone());
     }
 }

@@ -138,8 +138,8 @@ dma_trait_impl!(crate::spi::RxDma, SPI0, DMA0_CH1);
 dma_trait_impl!(crate::spi::TxDma, SPI1, DMA0_CH4);
 dma_trait_impl!(crate::spi::RxDma, SPI1, DMA0_CH3);
 
-impl_usart!(USART0, USART0);
-impl_usart!(USART1, USART1);
+impl_usart!(USART0, USART0, USART0, USART0_WAKER);
+impl_usart!(USART1, USART1, USART1, USART1_WAKER);
 
 pin_trait_impl!(crate::usart::TxPin, USART1, PA2);
 pin_trait_impl!(crate::usart::RxPin, USART1, PA3);

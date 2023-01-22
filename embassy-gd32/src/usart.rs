@@ -2,9 +2,14 @@
 
 use core::task::{Poll, Context};
 
+use embassy_cortex_m::interrupt::Priority;
 use embassy_hal_common::{into_ref, PeripheralRef, Peripheral};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Sender;
 use crate::chip::peripherals;
-use crate::utils::{ClockDivider, ClockMultiplier, Hertz};
+use crate::interrupt;
+use crate::interrupt::{Interrupt, InterruptExt};
+use crate::utils::{Hertz, InterruptWaker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -66,6 +71,7 @@ impl Default for Config {
 
 pub struct Uart<'d, T: Instance> {
     _p: PeripheralRef<'d, T>,
+    sender: Option<Sender<'d, CriticalSectionRawMutex, u8, 8>>,
 
 }
 
@@ -86,7 +92,7 @@ where T: Instance
         tx.set_as_output(crate::gpio::OutputType::AFPushPull, crate::gpio::Speed::Low);
         rx.set_as_input(crate::gpio::Pull::Up);
 
-        let mut this = Self { _p: uart };
+        let mut this = Self { _p: uart, sender: None };
         this.config(config);
         this
     }
@@ -143,6 +149,19 @@ where T: Instance
         }
     }
 
+    fn wait_for_tbe_with_interrupt(cx: &mut Context) -> Poll<()> {
+        let regs = T::regs();
+        let interrupt_waker = T::interrupt_waker();
+        critical_section::with(|cs| {
+            if regs.stat0.read().tbe().bit_is_set() {
+                Poll::Ready(())
+            } else {
+                interrupt_waker.register(cx, cs);
+                Poll::Pending
+            }
+        })
+    }
+
     fn wait_for_tc(cx: &mut Context) -> Poll<()> {
         let regs = T::regs();
         if regs.stat0.read().tc().bit_is_set() {
@@ -151,6 +170,42 @@ where T: Instance
             cx.waker().wake_by_ref();
             Poll::Pending
         }
+    }
+
+    fn wait_for_tc_with_interrupt(cx: &mut Context) -> Poll<()> {
+        let regs = T::regs();
+        let interrupt_waker = T::interrupt_waker();
+        critical_section::with(|cs| {
+            if regs.stat0.read().tc().bit_is_set() {
+                Poll::Ready(())
+            } else {
+                interrupt_waker.register(cx, cs);
+                Poll::Pending
+            }
+        })
+    }
+
+    fn wait_for_rbne(cx: &mut Context) -> Poll<()> {
+        let regs = T::regs();
+        if regs.stat0.read().rbne().bit_is_set() {
+            Poll::Ready(())
+        } else {
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+
+    fn wait_for_rbne_with_interrupt(cx: &mut Context) -> Poll<()> {
+        let regs = T::regs();
+        let interrupt_waker = T::interrupt_waker();
+        critical_section::with(|cs| {
+            if regs.stat0.read().rbne().bit_is_set() {
+                Poll::Ready(())
+            } else {
+                interrupt_waker.register(cx, cs);
+                Poll::Pending
+            }
+        })
     }
 
     pub async fn write(&mut self, buf: &[u8]) -> Result<(), Error> {
@@ -164,7 +219,79 @@ where T: Instance
         Ok(())
     }
 
+    /// Write data async using interrupt
+    pub async fn write_int(&mut self, buf: &[u8]) -> Result<(), Error> {
+        let regs = T::regs();
 
+        for byte in buf {
+            core::future::poll_fn(Self::wait_for_tbe_with_interrupt).await;
+            regs.data.write(|w| w.data().variant( *byte as u16 ));
+        }
+        core::future::poll_fn(Self::wait_for_tc_with_interrupt).await;
+        Ok(())
+
+    }
+
+    /// Read data async using interrupt
+    pub async fn read_int(&mut self, buf: &mut[u8]) -> Result<(), Error> {
+        let regs = T::regs();
+
+        for i in 0..buf.len() {
+            core::future::poll_fn(Self::wait_for_rbne_with_interrupt).await;
+            buf[i] = regs.data.read().data().bits() as u8;
+        }
+
+        Ok(())
+    }
+
+    pub async fn push_rx_to_channel(&mut self, interrupt: T::Interrupt, sender: Sender<'d, CriticalSectionRawMutex, u8, 8>) {
+        let regs = T::regs();
+
+        self.sender = Some(sender);
+        
+        interrupt.set_handler_context(self as *mut _ as *mut ());
+        let ptr = Self::on_interrupt as *const();
+        interrupt.set_handler(unsafe { core::mem::transmute(ptr) });
+
+        regs.ctl0.modify(|_, w| w.rbneie().set_bit() );
+
+        interrupt.set_priority(Priority::P2);
+        interrupt.unpend();
+        interrupt.enable();
+    }
+
+    fn on_interrupt(&mut self) {
+
+        let regs = T::regs();
+        if regs.stat0.read().rbne().bit_is_set() {
+            if let Some(ref mut sender) = self.sender {
+                let byte = regs.data.read().data().bits() as u8;
+                if let Err(_) = sender.try_send(byte) {
+                    error!("cannot sent uart data");
+                }
+            }
+        }
+        
+        let waker = T::interrupt_waker();
+        waker.signal();
+    }
+
+
+}
+
+
+
+pub(crate) static USART0_WAKER: InterruptWaker = InterruptWaker::new();
+pub(crate) static USART1_WAKER: InterruptWaker = InterruptWaker::new();
+
+#[interrupt]
+fn USART0() {
+    USART0_WAKER.signal();
+}
+
+#[interrupt]
+fn USART1() {
+    USART1_WAKER.signal();
 }
 
 pub(crate) mod sealed {
@@ -172,25 +299,32 @@ pub(crate) mod sealed {
 
     pub trait Instance {
         fn regs() -> &'static crate::pac::usart0::RegisterBlock;
+        fn interrupt_waker() -> &'static InterruptWaker;
     }
 }
 
 pin_trait!(TxPin, Instance);
 pin_trait!(RxPin, Instance);
 
-pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLPeripherial {}
+pub trait Instance: Peripheral<P = Self> + sealed::Instance + crate::cctl::CCTLPeripherial {
+    type Interrupt: Interrupt;
+}
 
 macro_rules! impl_usart {
-    ($type:ident, $pac_type:ident) => {
+    ($type:ident, $pac_type:ident, $irq:ident, $waker:ident) => {
 
         impl crate::usart::sealed::Instance for peripherals::$type {
             fn regs() -> &'static crate::pac::usart0::RegisterBlock {
                 unsafe { &*(crate::pac::$pac_type::ptr() as *const crate::pac::usart0::RegisterBlock) }
             }
+
+            fn interrupt_waker() -> &'static crate::utils::InterruptWaker {
+                &crate::usart::$waker
+            }
         }
 
         impl crate::usart::Instance for peripherals::$type {
-
+            type Interrupt = crate::interrupt::$irq;
         }
         
     };
