@@ -279,6 +279,13 @@ where T: Instance
 
 }
 
+impl<'d, T> core::fmt::Write for Uart<'d, T>
+where T: Instance
+{
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.blocking_write(s.as_bytes()).map_err(|_| core::fmt::Error)
+    }
+}
 
 
 pub(crate) static USART0_WAKER: InterruptWaker = InterruptWaker::new();
