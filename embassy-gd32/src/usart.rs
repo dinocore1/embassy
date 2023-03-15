@@ -219,6 +219,16 @@ where T: Instance
         Ok(())
     }
 
+    pub async fn read(&mut self, buf: &mut [u8]) -> Result<(), Error> {
+        let regs = T::regs();
+
+        for i in 0..buf.len() {
+            core::future::poll_fn(Self::wait_for_rbne).await;
+            buf[i] = regs.data.read().data().bits() as u8;
+        }
+        Ok(())
+    }
+
     /// Write data async using interrupt
     pub async fn write_int(&mut self, buf: &[u8]) -> Result<(), Error> {
         let regs = T::regs();
