@@ -51,6 +51,10 @@ embassy_hal_common::peripherals! {
     PB14,
     PB15,
 
+    PC13,
+    PC14,
+    PC15,
+
     DMA0_CH0,
     DMA0_CH1,
     DMA0_CH2,
@@ -103,6 +107,10 @@ impl_pin!(PB12, 1, 12);
 impl_pin!(PB13, 1, 13);
 impl_pin!(PB14, 1, 14);
 impl_pin!(PB15, 1, 15);
+
+impl_pin!(PC13, 2, 13);
+impl_pin!(PC14, 2, 14);
+impl_pin!(PC15, 2, 15);
 
 pin_trait_impl!(crate::spi::SckPin, SPI0, PA5);
 pin_trait_impl!(crate::spi::MisoPin, SPI0, PA6);
