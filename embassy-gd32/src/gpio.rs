@@ -122,8 +122,8 @@ impl<'d, T: Pin> Output<'d, T> {
 
 #[inline]
 fn set_mode(mut reg: u32, mode: u32, pos: u8) -> u32 {
-    reg &= !(0x0F << pos);
-    reg |= mode << pos;
+    reg &= !(0x0F << (4 *pos));
+    reg |= mode << (4 * pos);
     reg
 }
 
