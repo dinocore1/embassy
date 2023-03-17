@@ -250,6 +250,8 @@ where T: Instance
     pub async fn read_int(&mut self, interrupt: T::Interrupt, buf: &mut[u8]) -> Result<(), Error> {
         let regs = T::regs();
 
+        regs.ctl0.modify(|_, w| w.rbneie().set_bit());
+
         interrupt.set_priority(Priority::P2);
         interrupt.unpend();
         interrupt.enable();
