@@ -230,8 +230,12 @@ where T: Instance
     }
 
     /// Write data async using interrupt
-    pub async fn write_int(&mut self, buf: &[u8]) -> Result<(), Error> {
+    pub async fn write_int(&mut self, interrupt: T::Interrupt, buf: &[u8]) -> Result<(), Error> {
         let regs = T::regs();
+
+        interrupt.set_priority(Priority::P2);
+        interrupt.unpend();
+        interrupt.enable();
 
         for byte in buf {
             core::future::poll_fn(Self::wait_for_tbe_with_interrupt).await;
@@ -243,8 +247,12 @@ where T: Instance
     }
 
     /// Read data async using interrupt
-    pub async fn read_int(&mut self, buf: &mut[u8]) -> Result<(), Error> {
+    pub async fn read_int(&mut self, interrupt: T::Interrupt, buf: &mut[u8]) -> Result<(), Error> {
         let regs = T::regs();
+
+        interrupt.set_priority(Priority::P2);
+        interrupt.unpend();
+        interrupt.enable();
 
         for i in 0..buf.len() {
             core::future::poll_fn(Self::wait_for_rbne_with_interrupt).await;
