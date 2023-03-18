@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 [package.metadata.embassy_docs]
 src_base = "https://github.com/embassy-rs/embassy/blob/embassy-gd32-v$VERSION/embassy-gd32/src/"
 src_base_git = "https://github.com/embassy-rs/embassy/blob/$COMMIT/embassy-gd32/src/"
-features = ["defmt"]
+features = ["nightly", "defmt"]
 flavors = [
     { regex_feature = "gd32e5.*", target = "thumbv8m.main-none-eabihf" },
 ]
@@ -32,11 +32,12 @@ cortex-m = { version = ">=0.6.15,<0.8", features = ["critical-section-single-cor
 critical-section = "1.1"
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 chrono = { version = "0.4", default-features = false, optional = true }
-embedded-io = { version = "0.3.1", features = ["async"], optional = true }
+embedded-io = { version = "0.4", default-features = false }
 gd32e5 = { version = "0.7", optional = true }
 
 
 [features]
 default = ["defmt", "timedriver-rtc"]
+nightly = ["embedded-io/async"]
 timedriver-rtc = ["embassy-time", "embassy-time?/tick-hz-32_768"]
 gd32e503 = ["gd32e5/gd32e503", "gd32e5/critical-section", "gd32e5/rt"]

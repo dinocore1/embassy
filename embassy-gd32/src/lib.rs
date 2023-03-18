@@ -1,5 +1,10 @@
 #![no_std]
 
+#![cfg_attr(
+    feature = "nightly",
+    feature(async_fn_in_trait)
+)]
+
 #[cfg(not(any(feature = "gd32e503",)))]
 compile_error!("No chip feature activated. You must activate one of the chip features.");
 
