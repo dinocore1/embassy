@@ -1,6 +1,6 @@
 
 
-use core::{cell::UnsafeCell, future::poll_fn};
+use core::{cell::UnsafeCell, future::{poll_fn, Pending}};
 
 use super::*;
 
@@ -85,6 +85,21 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         }).await
     }
 
+    async fn inner_flush(&self) -> Result<(), core::convert::Infallible> {
+        poll_fn(move |cx| {
+            let inner = unsafe { &mut *self.inner.get() };
+            inner.with(|state| {
+                if !state.tx.is_empty() {
+                    state.tx_waker.register(cx.waker());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Ok(()))
+                }
+            })
+
+        }).await
+    }
+
     pub fn split(&mut self) -> (BufferedUartRx<'_, 'd, T>, BufferedUartTx<'_, 'd, T>) {
         (BufferedUartRx { inner: self }, BufferedUartTx { inner: self })
     }
@@ -102,6 +117,12 @@ impl<'d, 'a, T: Instance> BufferedUartRx<'d, 'a, T> {
     }
 }
 
+#[cfg(not(feature = "nightly"))]
+impl<'d, 'a, T: Instance> BufferedUartTx<'d, 'a, T> {
+    pub async fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        self.inner.inner_write(buf).await
+    }
+}
 
 #[cfg(feature = "nightly")]
 impl<'d, 'a, T: Instance> embedded_io::asynch::Read for BufferedUartRx<'d, 'a, T> {
@@ -111,7 +132,23 @@ impl<'d, 'a, T: Instance> embedded_io::asynch::Read for BufferedUartRx<'d, 'a, T
 }
 
 #[cfg(feature = "nightly")]
+impl<'d, 'a, T: Instance> embedded_io::asynch::Write for BufferedUartTx<'d, 'a, T> {
+    async fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        self.inner.inner_write(buf).await
+    }
+
+    async fn flush(&mut self) -> Result<(), Error> {
+        self.inner.inner_flush().await
+    }
+}
+
+#[cfg(feature = "nightly")]
 impl<'d, 'a, T: Instance> embedded_io::Io for BufferedUartRx<'d, 'a, T> {
+    type Error = core::convert::Infallible;
+}
+
+#[cfg(feature = "nightly")]
+impl<'d, 'a, T: Instance> embedded_io::Io for BufferedUartTx<'d, 'a, T> {
     type Error = core::convert::Infallible;
 }
 
