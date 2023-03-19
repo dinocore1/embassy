@@ -1,6 +1,5 @@
 #![macro_use]
 
-use core::future::poll_fn;
 use core::ptr;
 
 use embassy_hal_common::{into_ref, PeripheralRef};
