@@ -1,4 +1,4 @@
-use core::ops::Range;
+use core::{ops::Range, ptr::write_volatile};
 
 use embassy_hal_common::{into_ref, PeripheralRef};
 
@@ -17,6 +17,7 @@ pub struct Flash<'d, T: Instance> {
 impl<'d, T: Instance> Flash<'d, T> {
 
     pub const PAGE_SIZE: usize = 8 * 1024;
+    pub const WRITE_SIZE: usize = 4;
 
     pub fn new(p: impl Peripheral<P = T> + 'd) -> Self {
         into_ref!(p);
@@ -51,11 +52,23 @@ impl<'d, T: Instance> Flash<'d, T> {
         }
 
         while regs.stat.read().busy().bit_is_set() {}
+        regs.ctl.modify(|_, w| w.per().clear_bit());
         Ok(())
     }
 
-    pub fn blocking_write(&self, address: u32, buf: &[u8]) -> Result<(), Error> {
-        todo!()
+    pub fn blocking_write(&self, mut addr: u32, buf: &[u8]) -> Result<(), Error> {
+        let regs = T::regs();
+
+        for chunk in buf.chunks(Self::WRITE_SIZE) {
+            while regs.stat.read().busy().bit_is_set() {}
+            regs.ctl.modify(|_, w| w.pg().set_bit());
+            unsafe { write_volatile(addr as *mut u32, u32::from_le_bytes(chunk.try_into().unwrap())) };
+            addr += Self::WRITE_SIZE as u32;
+        }
+
+        while regs.stat.read().busy().bit_is_set() {}
+        
+        Ok(())
     }
 
     fn is_page_aligned(address: u32) -> bool {
