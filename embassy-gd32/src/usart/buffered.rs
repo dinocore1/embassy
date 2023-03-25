@@ -60,6 +60,7 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
                     state.rx.pop(len);
                     Poll::Ready(Ok(len))
                 } else {
+                    T::regs().ctl0.modify(|_, w| w.rbneie().set_bit());
                     state.rx_waker.register(cx.waker());
                     Poll::Pending
                 }
@@ -71,11 +72,11 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         poll_fn(move |cx| {
             let inner = unsafe { &mut *self.inner.get() };
             inner.with(|state| {
-                T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                 if !state.tx.is_full() {
                     let tx_buf = state.tx.push_buf();
                     let len = tx_buf.len().min(buf.len());
                     tx_buf[..len].copy_from_slice(&buf[..len]);
+                    T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                     Poll::Ready(Ok(len))
                 } else {
                     state.tx_waker.register(cx.waker());
@@ -85,7 +86,7 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         }).await
     }
 
-    async fn inner_flush(&self) -> Result<(), core::convert::Infallible> {
+    async fn inner_flush(&self) -> Result<(), Error> {
         poll_fn(move |cx| {
             let inner = unsafe { &mut *self.inner.get() };
             inner.with(|state| {
@@ -96,8 +97,38 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
                     Poll::Ready(Ok(()))
                 }
             })
-
         }).await
+    }
+
+    fn inner_blocking_flush(&self) -> Result<(), Error> {
+        let inner = unsafe { &mut *self.inner.get() };
+        inner.with(|state| {
+            let regs = T::regs();
+            let tx_buf = state.tx.pop_buf();
+            let len = tx_buf.len();
+            super::blocking_write(regs, tx_buf)?;
+            state.tx.pop(len);
+            Ok(())
+        })
+    }
+
+    pub fn inner_blocking_write(&self, buf: &[u8]) -> Result<usize, Error> {
+        let inner = unsafe { &mut *self.inner.get() };
+        inner.with(|state| {
+            let regs = T::regs();
+            {
+                // flush anything in the tx buffer
+                let tx_buf = state.tx.pop_buf();
+                let len = tx_buf.len();
+                super::blocking_write(regs, tx_buf)?;
+                state.tx.pop(len);
+            }
+
+            super::blocking_write(regs, buf)
+        }).map(|_| {
+            buf.len()
+        })
+        
     }
 
     pub fn split(&mut self) -> (BufferedUartRx<'_, 'd, T>, BufferedUartTx<'_, 'd, T>) {
@@ -105,6 +136,15 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
     }
 
 }
+
+// impl<'d, T: Instance> core::fmt::Write for UartBuffered<'d, T>
+// {
+//     fn write_str(&mut self, s: &str) -> core::fmt::Result {
+//         self.write_all()
+//         self.inner_blocking_write(s.as_bytes).map_err(|_| core::fmt::Error)
+//     }
+// }
+
 
 pub struct BufferedUartRx<'d, 'a, T: Instance> {
     inner: &'d UartBuffered<'a, T>,
@@ -143,13 +183,24 @@ impl<'d, 'a, T: Instance> embedded_io::asynch::Write for BufferedUartTx<'d, 'a, 
 }
 
 #[cfg(feature = "nightly")]
+impl<'d, 'a, T: Instance> embedded_io::blocking::Write for BufferedUartTx<'d, 'a, T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        self.inner.inner_blocking_write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.inner.inner_blocking_flush()
+    }
+}
+
+#[cfg(feature = "nightly")]
 impl<'d, 'a, T: Instance> embedded_io::Io for BufferedUartRx<'d, 'a, T> {
-    type Error = core::convert::Infallible;
+    type Error = super::Error;
 }
 
 #[cfg(feature = "nightly")]
 impl<'d, 'a, T: Instance> embedded_io::Io for BufferedUartTx<'d, 'a, T> {
-    type Error = core::convert::Infallible;
+    type Error = super::Error;
 }
 
 

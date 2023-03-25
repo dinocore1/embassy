@@ -8,6 +8,11 @@
 #[cfg(not(any(feature = "gd32e503",)))]
 compile_error!("No chip feature activated. You must activate one of the chip features.");
 
+#[cfg(feature = "nightly")]
+pub mod io {
+    pub use embedded_io::blocking;
+}
+
 // This mod MUST go first, so that the others see its macros.
 pub(crate) mod fmt;
 

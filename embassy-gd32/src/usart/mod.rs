@@ -20,6 +20,13 @@ pub enum Error {
     Overrun,
 }
 
+#[cfg(feature = "nightly")]
+impl embedded_io::Error for Error {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DataBits {
     DataBits5,
