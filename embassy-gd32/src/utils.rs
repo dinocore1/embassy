@@ -1,4 +1,4 @@
-use core::{ops::{Div, Mul}, task::{Waker, Context, Poll}};
+use core::{ops::{Div, Mul}, task::{Waker, Context}};
 
 use critical_section::CriticalSection;
 

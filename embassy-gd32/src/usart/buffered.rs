@@ -49,7 +49,7 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         }
     }
 
-    async fn inner_read(&self, buf: &mut [u8]) -> Result<usize, Error> {
+    pub async fn inner_read(&self, buf: &mut [u8]) -> Result<usize, Error> {
         poll_fn(move |cx| {
             let inner = unsafe { &mut *self.inner.get() };
             inner.with(|state| {
@@ -145,22 +145,52 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
 //     }
 // }
 
+impl<'d, T: Instance> UartBuffered<'d, T> {
+
+    pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        self.inner_read(buf).await
+    }
+
+    pub async fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        self.inner_write(buf).await
+    }
+
+    pub async fn flush(&mut self) -> Result<(), Error> {
+        self.inner_flush().await
+    }
+}
 
 pub struct BufferedUartRx<'d, 'a, T: Instance> {
     inner: &'d UartBuffered<'a, T>,
 }
 
-#[cfg(not(feature = "nightly"))]
 impl<'d, 'a, T: Instance> BufferedUartRx<'d, 'a, T> {
     pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         self.inner.inner_read(buf).await
     }
 }
 
-#[cfg(not(feature = "nightly"))]
 impl<'d, 'a, T: Instance> BufferedUartTx<'d, 'a, T> {
     pub async fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         self.inner.inner_write(buf).await
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'d, T: Instance> embedded_io::asynch::Read for UartBuffered<'d, T> {
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        self.inner_read(buf).await
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<'d, T: Instance> embedded_io::asynch::Write for UartBuffered<'d, T> {
+    async fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        self.inner_write(buf).await
+    }
+
+    async fn flush(&mut self) -> Result<(), Error> {
+        self.inner_flush().await
     }
 }
 
@@ -191,6 +221,11 @@ impl<'d, 'a, T: Instance> embedded_io::blocking::Write for BufferedUartTx<'d, 'a
     fn flush(&mut self) -> Result<(), Self::Error> {
         self.inner.inner_blocking_flush()
     }
+}
+
+#[cfg(feature = "nightly")]
+impl<'d, T: Instance> embedded_io::Io for UartBuffered<'d, T> {
+    type Error = super::Error;
 }
 
 #[cfg(feature = "nightly")]

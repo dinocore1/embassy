@@ -6,9 +6,9 @@ use embassy_hal_common::{into_ref, PeripheralRef};
 pub use embedded_hal_02::spi as hal;
 use embedded_hal_02::spi::{Phase, Polarity};
 
-use self::sealed::{EnableGuard, WordSize};
+use self::sealed::EnableGuard;
 use crate::chip::peripherals;
-use crate::interrupt::{Interrupt, InterruptExt};
+use crate::interrupt::Interrupt;
 use crate::pac::spi0::RegisterBlock as Regs;
 use crate::{Hertz, Peripheral};
 

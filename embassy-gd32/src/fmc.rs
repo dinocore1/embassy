@@ -10,6 +10,13 @@ pub enum Error {
     PageNotAligned(u32),
 }
 
+#[cfg(feature = "nightly")]
+impl embedded_io::Error for Error {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
+
 pub struct Flash<'d, T: Instance> {
     _p: PeripheralRef<'d, T>,
 }

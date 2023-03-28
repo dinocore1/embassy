@@ -1,7 +1,5 @@
 use core::mem::MaybeUninit;
 
-use atomic_polyfill::{compiler_fence, Ordering};
-
 use crate::utils::{ClockDivider, ClockMultiplier, Hertz};
 
 #[derive(Debug, Clone, Copy)]

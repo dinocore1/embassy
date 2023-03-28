@@ -76,5 +76,14 @@ pub fn init(config: Config) -> chip::Peripherals {
     #[cfg(feature = "timedriver-rtc")]
     timedriver_rtc::init();
 
+    #[cfg(feature = "timedriver-systick")]
+    embassy_cortex_m::systick::init(cctl::get_freq().ck_ahb);
+
     chip::Peripherals::take()
+}
+
+#[cfg(feature = "timedriver-systick")]
+#[cortex_m::interrupt]
+fn SysTick() {
+    embassy_cortex_m::systick::systick_timedriver_interrupt();
 }

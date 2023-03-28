@@ -40,4 +40,5 @@ gd32e5 = { version = "0.7", optional = true }
 default = ["defmt", "timedriver-rtc"]
 nightly = ["embedded-io/async"]
 timedriver-rtc = ["embassy-time", "embassy-time?/tick-hz-32_768"]
+timedriver-systick = ["embassy-time", "embassy-cortex-m/timedriver-systick", "embassy-time?/tick-hz-100"]
 gd32e503 = ["gd32e5/gd32e503", "gd32e5/critical-section", "gd32e5/rt"]
