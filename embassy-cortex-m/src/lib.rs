@@ -8,3 +8,6 @@ pub(crate) mod fmt;
 pub mod executor;
 pub mod interrupt;
 pub mod peripheral;
+
+#[cfg(feature = "timedriver-systick")]
+pub mod systick;
