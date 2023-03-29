@@ -68,7 +68,7 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         }).await
     }
 
-    async fn inner_write(&self, buf: &[u8]) -> Result<usize, Error> {
+    pub async fn inner_write(&self, buf: &[u8]) -> Result<usize, Error> {
         poll_fn(move |cx| {
             let inner = unsafe { &mut *self.inner.get() };
             inner.with(|state| {
@@ -76,6 +76,7 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
                     let tx_buf = state.tx.push_buf();
                     let len = tx_buf.len().min(buf.len());
                     tx_buf[..len].copy_from_slice(&buf[..len]);
+                    state.tx.push(len);
                     T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                     Poll::Ready(Ok(len))
                 } else {
