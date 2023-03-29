@@ -1,19 +1,34 @@
 
 
-use core::{cell::UnsafeCell, future::{poll_fn, Pending}};
+use core::{
+    cell::UnsafeCell,
+    future::{poll_fn, Pending}
+};
+use embassy_hal_common::atomic_ring_buffer;
 
 use super::*;
 
 
-pub struct State<'d, T: Instance>(StateStorage<StateInner<'d, T>>);
+pub struct State<'d, T: Instance> {
+    irq_state: StateStorage<StateInner<'d, T>>,
+    tx: atomic_ring_buffer::RingBuffer,
+    rx: atomic_ring_buffer::RingBuffer,
+}
+
 impl<'d, T: Instance> State<'d, T> {
     pub const fn new() -> Self {
-        Self(StateStorage::new())
+        Self {
+            irq_state: StateStorage::new(),
+            tx: atomic_ring_buffer::RingBuffer::new(),
+            rx: atomic_ring_buffer::RingBuffer::new(),
+        }
     }
 }
 
 pub struct UartBuffered<'d, T: Instance> {
-    inner: UnsafeCell<PeripheralMutex<'d, StateInner<'d, T>>>,
+    irq_state: UnsafeCell<PeripheralMutex<'d, StateInner<'d, T>>>,
+    rx: &'d atomic_ring_buffer::RingBuffer,
+    tx: &'d atomic_ring_buffer::RingBuffer,
 }
 
 impl<'d, T: Instance> UartBuffered<'d, T> {
@@ -38,97 +53,122 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         let pclk_freq = T::frequency();
         configure(regs, &config, pclk_freq);
 
+        
+        unsafe { 
+            state.rx.init(rx_buffer.as_mut_ptr(), rx_buffer.len());
+            state.tx.init(tx_buffer.as_mut_ptr(), tx_buffer.len());
+        }
+
+        let regs = T::regs();
+        regs.ctl0.modify(|_, w| w.rbneie().set_bit());
+
+        let rx_writer = unsafe { state.rx.writer() };
+        let tx_reader = unsafe { state.tx.reader() };
+
+        let irq_state = PeripheralMutex::new(irq, &mut state.irq_state, move || StateInner {
+            _p: p,
+            rx_waker: WakerRegistration::new(),
+            rx_writer,
+            tx_waker: WakerRegistration::new(),
+            tx_reader,
+            
+        });
+
         Self {
-            inner: UnsafeCell::new(PeripheralMutex::new(irq, &mut state.0, move || StateInner {
-                _p: p,
-                tx: RingBuffer::new(tx_buffer),
-                tx_waker: WakerRegistration::new(),
-                rx: RingBuffer::new(rx_buffer),
-                rx_waker: WakerRegistration::new(),
-            }))
+            irq_state: UnsafeCell::new(irq_state),
+            tx: &state.tx,
+            rx: &state.rx
         }
     }
 
     pub async fn inner_read(&self, buf: &mut [u8]) -> Result<usize, Error> {
         poll_fn(move |cx| {
-            let inner = unsafe { &mut *self.inner.get() };
-            inner.with(|state| {
-                if !state.rx.is_empty() {
-                    let data = state.rx.pop_buf();
-                    let len = data.len().min(buf.len());
-                    buf[..len].copy_from_slice(&data[..len]);
-                    state.rx.pop(len);
-                    Poll::Ready(Ok(len))
-                } else {
-                    T::regs().ctl0.modify(|_, w| w.rbneie().set_bit());
+            
+            let mut reader = unsafe { self.rx.reader() };
+            let (data_ptr, n) = reader.pop_buf();
+
+            if n > 0 {
+                let len = n.min(buf.len());
+                let data = unsafe { core::slice::from_raw_parts(data_ptr, len) };
+                buf[..len].copy_from_slice(data);
+                reader.pop_done(len);
+                Poll::Ready(Ok(len))
+            } else {
+                let inner = unsafe { &mut *self.irq_state.get() };
+                inner.with(|state| {
                     state.rx_waker.register(cx.waker());
-                    Poll::Pending
-                }
-            })
+                    
+                });
+                Poll::Pending
+            }
         }).await
     }
 
     pub async fn inner_write(&self, buf: &[u8]) -> Result<usize, Error> {
+        T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
         poll_fn(move |cx| {
-            let inner = unsafe { &mut *self.inner.get() };
-            inner.with(|state| {
-                if !state.tx.is_full() {
-                    let tx_buf = state.tx.push_buf();
-                    let len = tx_buf.len().min(buf.len());
-                    tx_buf[..len].copy_from_slice(&buf[..len]);
-                    state.tx.push(len);
-                    T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
-                    Poll::Ready(Ok(len))
-                } else {
+
+            let mut writer = unsafe { self.tx.writer() };
+            let (data_ptr, n) = writer.push_buf();
+
+            if n > 0 {
+                let len = n.min(buf.len());
+                let data = unsafe { core::slice::from_raw_parts_mut(data_ptr, len) };
+                data[..len].copy_from_slice(&buf[..len]);
+                writer.push_done(len);
+                
+                Poll::Ready(Ok(len))
+            } else {
+                let inner = unsafe { &mut *self.irq_state.get() };
+                inner.with(|state| {
                     state.tx_waker.register(cx.waker());
-                    Poll::Pending
-                }
-            })
+                });
+                Poll::Pending
+            }
         }).await
     }
 
     async fn inner_flush(&self) -> Result<(), Error> {
         poll_fn(move |cx| {
-            let inner = unsafe { &mut *self.inner.get() };
-            inner.with(|state| {
-                if !state.tx.is_empty() {
+            if !self.tx.is_empty() {
+                let inner = unsafe { &mut *self.irq_state.get() };
+                inner.with(|state| {
                     state.tx_waker.register(cx.waker());
-                    Poll::Pending
-                } else {
-                    Poll::Ready(Ok(()))
-                }
-            })
+                });
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(()))
+            }
+
         }).await
     }
 
     fn inner_blocking_flush(&self) -> Result<(), Error> {
-        let inner = unsafe { &mut *self.inner.get() };
-        inner.with(|state| {
-            let regs = T::regs();
-            let tx_buf = state.tx.pop_buf();
-            let len = tx_buf.len();
-            super::blocking_write(regs, tx_buf)?;
-            state.tx.pop(len);
-            Ok(())
-        })
+        while !self.tx.is_empty() {}
+        Ok(())
     }
 
     pub fn inner_blocking_write(&self, buf: &[u8]) -> Result<usize, Error> {
-        let inner = unsafe { &mut *self.inner.get() };
-        inner.with(|state| {
-            let regs = T::regs();
-            {
-                // flush anything in the tx buffer
-                let tx_buf = state.tx.pop_buf();
-                let len = tx_buf.len();
-                super::blocking_write(regs, tx_buf)?;
-                state.tx.pop(len);
-            }
+        let mut writer = unsafe { self.tx.writer() };
+        T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
 
-            super::blocking_write(regs, buf)
-        }).map(|_| {
-            buf.len()
-        })
+        fn spin_wait(writer: &mut atomic_ring_buffer::Writer<'_>) -> (*mut u8, usize) {
+            loop {
+                let (data_ptr, n) = writer.push_buf();
+                if n > 0 {
+                    return (data_ptr, n)
+                }
+            }
+        }
+
+        let (data_ptr, n) = spin_wait(&mut writer);
+
+        let len = n.min(buf.len());
+        let data = unsafe { core::slice::from_raw_parts_mut(data_ptr, len) };
+        data[..len].copy_from_slice(&buf[..len]);
+        writer.push_done(len);
+        
+        Ok(len)
         
     }
 
@@ -249,10 +289,10 @@ pub struct BufferedUartTx<'d, 'a, T: Instance> {
 
 struct StateInner<'d, T: Instance> {
     _p: PeripheralRef<'d, T>,
-    rx: RingBuffer<'d>,
     rx_waker: WakerRegistration,
-    tx: RingBuffer<'d>,
+    rx_writer: atomic_ring_buffer::Writer<'d>,
     tx_waker: WakerRegistration,
+    tx_reader: atomic_ring_buffer::Reader<'d>,
 }
 
 impl<'a, T: Instance> PeripheralState for StateInner<'a, T> {
@@ -281,22 +321,15 @@ impl<'a, T: Instance> PeripheralState for StateInner<'a, T> {
 
         if stat0.rbne().bit_is_set() {
             let byte = regs.data.read().data().bits() as u8;
-            let buf = self.rx.push_buf();
-            if !buf.is_empty() {
-                buf[0] = byte;
-                self.rx.push(1);
-            } else {
+            if !self.rx_writer.push_one(byte) {
                 warn!("RX buffer full");
             }
-
             self.rx_waker.wake();
         }
 
         if stat0.tbe().bit_is_set() {
-            let buf = self.tx.pop_buf();
-            if !buf.is_empty() {
-                regs.data.write(|w| w.data().variant(buf[0].into()));
-                self.tx.pop(1);
+            if let Some(byte) = self.tx_reader.pop_one() {
+                regs.data.write(|w| w.data().variant(byte.into()));
                 self.tx_waker.wake();
             } else {
                 // Disable the interrupt until we have something to transmit again

@@ -4,7 +4,6 @@ use core::task::{Poll, Context};
 use crate::{chip::peripherals, Hertz};
 use embassy_cortex_m::peripheral::{PeripheralMutex, PeripheralState, StateStorage};
 use embassy_hal_common::{into_ref, PeripheralRef, Peripheral};
-use embassy_hal_common::ring_buffer::RingBuffer;
 use embassy_cortex_m::interrupt::InterruptExt;
 use embassy_sync::waitqueue::WakerRegistration;
 use futures::Future;
