@@ -84,9 +84,15 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         poll_fn(move |cx| {
             
             let mut reader = unsafe { self.rx.reader() };
-            let (data_ptr, n) = reader.pop_buf();
 
-            //info!("inner_read n {}", n);
+            let inner = unsafe { &mut *self.irq_state.get() };
+            let (data_ptr, n) = inner.with(|state| {
+                let (data_ptr, n) = reader.pop_buf();
+                if n == 0 {
+                    state.rx_waker.register(cx.waker());
+                }
+                (data_ptr, n)
+            });
 
             if n > 0 {
                 let len = n.min(buf.len());
@@ -95,10 +101,6 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
                 reader.pop_done(len);
                 Poll::Ready(Ok(len))
             } else {
-                let inner = unsafe { &mut *self.irq_state.get() };
-                inner.with(|state| {
-                    state.rx_waker.register(cx.waker());
-                });
                 Poll::Pending
             }
         }).await
@@ -107,25 +109,27 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
     pub async fn inner_write(&self, buf: &[u8]) -> Result<usize, Error> {
         poll_fn(move |cx| {
 
-            let should_enable = self.tx.is_empty();
             let mut writer = unsafe { self.tx.writer() };
-            let (data_ptr, n) = writer.push_buf();
 
-            //info!("inner_write n {}", n);
+            let inner = unsafe { &mut *self.irq_state.get() };
+            let (data_ptr, n) = inner.with(|state| {
+                let (data_ptr, n) = writer.push_buf();
+                if n == 0 {
+                    // if the TX buffer is full, we have to wait
+                    state.tx_waker.register(cx.waker());
+                }
+                (data_ptr, n)
+            });
 
             if n > 0 {
                 let len = n.min(buf.len());
                 let data = unsafe { core::slice::from_raw_parts_mut(data_ptr, len) };
                 data[..len].copy_from_slice(&buf[..len]);
                 writer.push_done(len);
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                 T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                 Poll::Ready(Ok(len))
             } else {
-                let inner = unsafe { &mut *self.irq_state.get() };
-                inner.with(|state| {
-                    T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
-                    state.tx_waker.register(cx.waker());
-                });
                 Poll::Pending
             }
         }).await
@@ -136,10 +140,8 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
             
             let inner = unsafe { &mut *self.irq_state.get() };
             inner.with(|state| {
-                //let (_, n) = unsafe { self.tx.reader().pop_buf() };
-                //info!("inner_flush {}", n);
                 if !self.tx.is_empty() {
-                    T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
+                    //T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                     state.tx_waker.register(cx.waker());
                     Poll::Pending
                 } else {
@@ -157,10 +159,8 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
     }
 
     pub fn inner_blocking_write(&self, buf: &[u8]) -> Result<usize, Error> {
-        //info!("blocking write");
         let mut writer = unsafe { self.tx.writer() };
-        T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
-
+        
         fn spin_wait(writer: &mut atomic_ring_buffer::Writer<'_>) -> (*mut u8, usize) {
             loop {
                 let (data_ptr, n) = writer.push_buf();
@@ -176,6 +176,8 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         let data = unsafe { core::slice::from_raw_parts_mut(data_ptr, len) };
         data[..len].copy_from_slice(&buf[..len]);
         writer.push_done(len);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
         
         Ok(len)
         
