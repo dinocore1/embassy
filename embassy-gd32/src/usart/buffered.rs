@@ -54,9 +54,9 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         configure(regs, &config, pclk_freq);
 
         
-        unsafe { 
-            state.rx.init(rx_buffer.as_mut_ptr(), rx_buffer.len());
+        unsafe {
             state.tx.init(tx_buffer.as_mut_ptr(), tx_buffer.len());
+            state.rx.init(rx_buffer.as_mut_ptr(), rx_buffer.len());
         }
 
         let regs = T::regs();
@@ -71,7 +71,6 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
             rx_writer,
             tx_waker: WakerRegistration::new(),
             tx_reader,
-            
         });
 
         Self {
@@ -87,6 +86,8 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
             let mut reader = unsafe { self.rx.reader() };
             let (data_ptr, n) = reader.pop_buf();
 
+            //info!("inner_read n {}", n);
+
             if n > 0 {
                 let len = n.min(buf.len());
                 let data = unsafe { core::slice::from_raw_parts(data_ptr, len) };
@@ -97,7 +98,6 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
                 let inner = unsafe { &mut *self.irq_state.get() };
                 inner.with(|state| {
                     state.rx_waker.register(cx.waker());
-                    
                 });
                 Poll::Pending
             }
@@ -105,22 +105,25 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
     }
 
     pub async fn inner_write(&self, buf: &[u8]) -> Result<usize, Error> {
-        T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
         poll_fn(move |cx| {
 
+            let should_enable = self.tx.is_empty();
             let mut writer = unsafe { self.tx.writer() };
             let (data_ptr, n) = writer.push_buf();
+
+            //info!("inner_write n {}", n);
 
             if n > 0 {
                 let len = n.min(buf.len());
                 let data = unsafe { core::slice::from_raw_parts_mut(data_ptr, len) };
                 data[..len].copy_from_slice(&buf[..len]);
                 writer.push_done(len);
-                
+                T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                 Poll::Ready(Ok(len))
             } else {
                 let inner = unsafe { &mut *self.irq_state.get() };
                 inner.with(|state| {
+                    T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                     state.tx_waker.register(cx.waker());
                 });
                 Poll::Pending
@@ -130,25 +133,31 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
 
     async fn inner_flush(&self) -> Result<(), Error> {
         poll_fn(move |cx| {
-            if !self.tx.is_empty() {
-                let inner = unsafe { &mut *self.irq_state.get() };
-                inner.with(|state| {
+            
+            let inner = unsafe { &mut *self.irq_state.get() };
+            inner.with(|state| {
+                //let (_, n) = unsafe { self.tx.reader().pop_buf() };
+                //info!("inner_flush {}", n);
+                if !self.tx.is_empty() {
+                    T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
                     state.tx_waker.register(cx.waker());
-                });
-                Poll::Pending
-            } else {
-                Poll::Ready(Ok(()))
-            }
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Ok(()))
+                }  
+            })
 
         }).await
     }
 
     fn inner_blocking_flush(&self) -> Result<(), Error> {
+        info!("blocking flush");
         while !self.tx.is_empty() {}
         Ok(())
     }
 
     pub fn inner_blocking_write(&self, buf: &[u8]) -> Result<usize, Error> {
+        //info!("blocking write");
         let mut writer = unsafe { self.tx.writer() };
         T::regs().ctl0.modify(|_, w| w.tbeie().set_bit());
 
