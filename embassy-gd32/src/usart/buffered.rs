@@ -2,7 +2,7 @@
 
 use core::{
     cell::UnsafeCell,
-    future::{poll_fn, Pending}
+    future::{poll_fn}
 };
 use embassy_hal_common::atomic_ring_buffer;
 
