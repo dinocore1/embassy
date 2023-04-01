@@ -171,6 +171,7 @@ pub mod irqs {
     declare!(USART1);
     declare!(USART2);
     declare!(CAN0_RX1);
+    declare!(CAN0_EWMC);
     declare!(DMA0_CHANNEL0);
     declare!(DMA0_CHANNEL1);
     declare!(DMA0_CHANNEL2);
