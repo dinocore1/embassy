@@ -152,7 +152,7 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
         }).await
     }
 
-    fn inner_blocking_flush(&self) -> Result<(), Error> {
+    pub fn inner_blocking_flush(&self) -> Result<(), Error> {
         info!("blocking flush");
         while !self.tx.is_empty() {}
         Ok(())
