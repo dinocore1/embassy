@@ -5,7 +5,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use embassy_hal_common::{into_ref, PeripheralRef};
-use embassy_sync::waitqueue::WakerRegistration;
+use crate::cctl::CCTLPeripherial;
 
 use crate::{interrupt, Peripheral};
 
@@ -99,6 +99,7 @@ where
     S: Word,
     D: Word,
 {
+    C::Instance::enable();
     let mut ctrl_reg_val = 0;
     let ctrl_reg = unsafe { &*((&mut ctrl_reg_val) as *mut _ as *mut crate::pac::dma0::CH0CTL) };
 
@@ -160,6 +161,7 @@ where
     S: Word,
     D: Word,
 {
+    C::Instance::enable();
     let mut ctrl_reg_val = 0;
 
     let ctrl_reg = unsafe { &*(&mut ctrl_reg_val as *mut _ as *mut crate::pac::dma0::CH0CTL) };
@@ -301,7 +303,7 @@ impl Word for u32 {
     }
 }
 
-pub trait Instance: Peripheral<P = Self> + 'static {
+pub trait Instance: Peripheral<P = Self> + crate::cctl::CCTLPeripherial + 'static {
     fn wakers() -> &'static [waker::DmaWaker];
 
     fn regs() -> &'static crate::pac::dma0::RegisterBlock;
@@ -341,6 +343,40 @@ macro_rules! impl_dma_channel {
             }
         }
     };
+}
+
+impl crate::cctl::CCTLPeripherial for crate::peripherals::DMA0 {
+    fn frequency() -> crate::utils::Hertz {
+        let clocks = crate::cctl::get_freq();
+        clocks.ahb
+    }
+
+    fn enable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.ahben.modify(|_, w| w.dma0en().set_bit() );
+    }
+
+    fn disable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.ahben.modify(|_, w| w.dma0en().clear_bit() );
+    }
+}
+
+impl crate::cctl::CCTLPeripherial for crate::peripherals::DMA1 {
+    fn frequency() -> crate::utils::Hertz {
+        let clocks = crate::cctl::get_freq();
+        clocks.ahb
+    }
+
+    fn enable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.ahben.modify(|_, w| w.dma0en().set_bit() );
+    }
+
+    fn disable() {
+        let rcu = unsafe { crate::chip::pac::Peripherals::steal().RCU };
+        rcu.ahben.modify(|_, w| w.dma0en().clear_bit() );
+    }
 }
 
 #[interrupt]
