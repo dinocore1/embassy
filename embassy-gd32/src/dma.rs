@@ -382,11 +382,15 @@ impl crate::cctl::CCTLPeripherial for crate::peripherals::DMA1 {
 #[interrupt]
 unsafe fn DMA0_CHANNEL0() {
     debug!("DMA0_CHANNEL0");
-    let inst = &*crate::pac::DMA0::ptr();
+    let mut inst = &*crate::pac::DMA0::ptr();
     let intf = inst.intf.read();
     if intf.errif0().bit_is_set() {
         error!("DMA0_CHANNEL0: error");
     }
+
+    let all_if = 0x0F_u32 << (4 * 0);
+    inst.intc.write(|w| unsafe { w.bits(all_if) });
+
     crate::chip::peripherals::DMA0::wakers()[0].wake();
 }
 
@@ -398,6 +402,10 @@ unsafe fn DMA0_CHANNEL1() {
     if intf.errif1().bit_is_set() {
         error!("DMA0_CHANNEL1: error");
     }
+
+    let all_if = 0x0F_u32 << (4 * 1);
+    inst.intc.write(|w| unsafe { w.bits(all_if) });
+
     crate::chip::peripherals::DMA0::wakers()[1].wake();
 }
 
@@ -409,6 +417,10 @@ unsafe fn DMA0_CHANNEL2() {
     if intf.errif2().bit_is_set() {
         error!("DMA0_CHANNEL2: error");
     }
+
+    let all_if = 0x0F_u32 << (4 * 2);
+    inst.intc.write(|w| unsafe { w.bits(all_if) });
+
     crate::chip::peripherals::DMA0::wakers()[2].wake();
 }
 
@@ -420,6 +432,10 @@ unsafe fn DMA0_CHANNEL3() {
     if intf.errif3().bit_is_set() {
         error!("DMA0_CHANNEL3: error");
     }
+
+    let all_if = 0x0F_u32 << (4 * 3);
+    inst.intc.write(|w| unsafe { w.bits(all_if) });
+
     crate::chip::peripherals::DMA0::wakers()[3].wake();
 }
 
@@ -431,6 +447,10 @@ unsafe fn DMA0_CHANNEL4() {
     if intf.errif4().bit_is_set() {
         error!("DMA0_CHANNEL4: error");
     }
+
+    let all_if = 0x0F_u32 << (4 * 4);
+    inst.intc.write(|w| unsafe { w.bits(all_if) });
+
     crate::chip::peripherals::DMA0::wakers()[4].wake();
 }
 
@@ -442,6 +462,10 @@ unsafe fn DMA0_CHANNEL5() {
     if intf.errif5().bit_is_set() {
         error!("DMA0_CHANNEL5: error");
     }
+
+    let all_if = 0x0F_u32 << (4 * 5);
+    inst.intc.write(|w| unsafe { w.bits(all_if) });
+
     crate::chip::peripherals::DMA0::wakers()[5].wake();
 }
 
@@ -453,5 +477,9 @@ unsafe fn DMA0_CHANNEL6() {
     if intf.errif6().bit_is_set() {
         error!("DMA0_CHANNEL6: error");
     }
+
+    let all_if = 0x0F_u32 << (4 * 6);
+    inst.intc.write(|w| unsafe { w.bits(all_if) });
+
     crate::chip::peripherals::DMA0::wakers()[6].wake();
 }
