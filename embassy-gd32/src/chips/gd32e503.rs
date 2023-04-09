@@ -128,19 +128,19 @@ impl_spi!(SPI1, SPI1, SPI1);
 impl_dma!(DMA0, DMA0, 7);
 impl_dma!(DMA1, DMA1, 5);
 
-impl_dma_channel!(DMA0_CH0, DMA0, 0);
-impl_dma_channel!(DMA0_CH1, DMA0, 1);
-impl_dma_channel!(DMA0_CH2, DMA0, 2);
-impl_dma_channel!(DMA0_CH3, DMA0, 3);
-impl_dma_channel!(DMA0_CH4, DMA0, 4);
-impl_dma_channel!(DMA0_CH5, DMA0, 5);
-impl_dma_channel!(DMA0_CH6, DMA0, 6);
+impl_dma_channel!(DMA0_CH0, DMA0, 0, DMA0_CHANNEL0);
+impl_dma_channel!(DMA0_CH1, DMA0, 1, DMA0_CHANNEL1);
+impl_dma_channel!(DMA0_CH2, DMA0, 2, DMA0_CHANNEL2);
+impl_dma_channel!(DMA0_CH3, DMA0, 3, DMA0_CHANNEL3);
+impl_dma_channel!(DMA0_CH4, DMA0, 4, DMA0_CHANNEL4);
+impl_dma_channel!(DMA0_CH5, DMA0, 5, DMA0_CHANNEL5);
+impl_dma_channel!(DMA0_CH6, DMA0, 6, DMA0_CHANNEL6);
 
-impl_dma_channel!(DMA1_CH0, DMA1, 0);
-impl_dma_channel!(DMA1_CH1, DMA1, 1);
-impl_dma_channel!(DMA1_CH2, DMA1, 2);
-impl_dma_channel!(DMA1_CH3, DMA1, 3);
-impl_dma_channel!(DMA1_CH4, DMA1, 4);
+impl_dma_channel!(DMA1_CH0, DMA1, 0, DMA1_CHANNEL0);
+impl_dma_channel!(DMA1_CH1, DMA1, 1, DMA1_CHANNEL1);
+impl_dma_channel!(DMA1_CH2, DMA1, 2, DMA1_CHANNEL2);
+impl_dma_channel!(DMA1_CH3, DMA1, 3, DMA1_CHANNEL3_DMA1_CHANNEL4);
+impl_dma_channel!(DMA1_CH4, DMA1, 4, DMA1_CHANNEL3_DMA1_CHANNEL4);
 
 dma_trait_impl!(crate::spi::TxDma, SPI0, DMA0_CH2);
 dma_trait_impl!(crate::spi::RxDma, SPI0, DMA0_CH1);

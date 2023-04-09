@@ -5,6 +5,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use embassy_hal_common::{into_ref, PeripheralRef};
+use embassy_sync::waitqueue::WakerRegistration;
 
 use crate::{interrupt, Peripheral};
 
@@ -308,6 +309,7 @@ pub trait Instance: Peripheral<P = Self> + 'static {
 
 pub trait Channel: Peripheral<P = Self> + 'static {
     type Instance: Instance;
+    type Interrupt: crate::interrupt::Interrupt;
 
     fn number() -> u8;
 }
@@ -329,9 +331,10 @@ macro_rules! impl_dma {
 }
 
 macro_rules! impl_dma_channel {
-    ($type:ident, $inst:ident, $ch:expr) => {
-        impl crate::dma::Channel for peripherals::$type {
+    ($name:ident, $inst:ident, $ch:expr, $irq:ident) => {
+        impl crate::dma::Channel for peripherals::$name {
             type Instance = peripherals::$inst;
+            type Interrupt = crate::interrupt::$irq;
 
             fn number() -> u8 {
                 $ch

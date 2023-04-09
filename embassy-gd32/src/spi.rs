@@ -1,5 +1,6 @@
 #![macro_use]
 
+use core::ops::Deref;
 use core::ptr;
 
 use embassy_hal_common::{into_ref, PeripheralRef};
@@ -8,7 +9,7 @@ use embedded_hal_02::spi::{Phase, Polarity};
 
 use self::sealed::EnableGuard;
 use crate::chip::peripherals;
-use crate::interrupt::Interrupt;
+use crate::interrupt::{Interrupt, InterruptExt};
 use crate::pac::spi0::RegisterBlock as Regs;
 use crate::{Hertz, Peripheral};
 
