@@ -363,6 +363,8 @@ impl<'d, T: Instance> Spi<'d, T> {
     {
         let regs = T::regs();
 
+        self.set_word_size(W::FF16);
+
         let count = tx.len();
         if count != rx.len() {
             return Err(Error::BufLen);
