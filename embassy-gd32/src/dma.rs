@@ -223,8 +223,8 @@ where
             configure_channel(
                 C::Instance::regs(),
                 C::number(),
-                dest as *const (),
                 src as *const (),
+                dest as *const (),
                 ctrl_reg_val,
                 count,
             );
