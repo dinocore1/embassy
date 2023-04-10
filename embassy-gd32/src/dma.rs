@@ -1,59 +1,89 @@
 #![macro_use]
 
+use core::cell::UnsafeCell;
 use core::future::Future;
+use core::marker::PhantomData;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
+use atomic_polyfill::AtomicBool;
+use embassy_cortex_m::interrupt::Interrupt;
+use embassy_cortex_m::peripheral::PeripheralState;
 use embassy_hal_common::{into_ref, PeripheralRef};
+use embassy_sync::waitqueue::WakerRegistration;
 use crate::cctl::CCTLPeripherial;
 
 use crate::{interrupt, Peripheral};
 
-pub(crate) mod waker {
-    use core::cell::UnsafeCell;
-    use core::task::Waker;
+struct ChannelStateInner {
+    pub signal: bool,
+    pub waker: WakerRegistration,
+}
 
-    pub struct DmaWaker {
-        waker: UnsafeCell<Option<Waker>>,
-    }
-
-    unsafe impl Send for DmaWaker {}
-    unsafe impl Sync for DmaWaker {}
-
-    impl DmaWaker {
-        pub(crate) const fn new() -> Self {
-            Self {
-                waker: UnsafeCell::new(None),
-            }
-        }
-
-        pub fn register<'a>(&self, w: &Waker, _cs: critical_section::CriticalSection<'a>) {
-            let waker = unsafe { &mut *self.waker.get() };
-
-            match waker {
-                None => {
-                    *waker = Some(w.clone());
-                }
-
-                Some(w2) => {
-                    if !w2.will_wake(w) {
-                        panic!("cant handle two tasks waiting on the same thing");
-                    }
-                }
-            }
-        }
-
-        pub fn wake(&self) {
-            let waker = critical_section::with(|_| {
-                let waker = unsafe { &mut *self.waker.get() };
-                waker.take()
-            });
-            if let Some(waker) = waker {
-                waker.wake();
-            }
+impl ChannelStateInner {
+    pub const fn new() -> Self {
+        Self {
+            signal: false,
+            waker: WakerRegistration::new(),
         }
     }
 }
+
+pub struct ChannelState<C: Interrupt> {
+    _marker: PhantomData<C>,
+    inner: UnsafeCell<ChannelStateInner>,
+}
+
+impl<C> ChannelState<C>
+where C: Interrupt {
+    pub const fn new() -> Self {
+        Self {
+            _marker: PhantomData{},
+            inner: UnsafeCell::new(ChannelStateInner::new()),
+        }
+    }
+
+    fn with<F, R>(&self, f: F) -> R
+    where F: FnOnce(&mut ChannelStateInner) -> R
+    {
+        use embassy_cortex_m::interrupt::InterruptExt;
+        let irq = unsafe { C::steal() };
+        irq.disable();
+        let r = f(unsafe { &mut *self.inner.get() });
+        irq.enable();
+        r
+    }
+
+    fn interrupt(&self) {
+        let inner = unsafe { &mut *self.inner.get() };
+        inner.signal = true;
+        inner.waker.wake();
+    }
+}
+
+unsafe impl<C> Sync for ChannelState<C> where C: Interrupt {}
+
+// impl<C> PeripheralState for ChannelState<C>
+// where C: Channel
+// {
+//     type Interrupt = C::Interrupt;
+
+//     fn on_interrupt(&mut self) {
+//         let regs = C::Instance::regs();
+//         let ch_num = C::number();
+
+//         let intf = regs.intf.read();
+//         if intf.errif0().bit_is_set() {
+//             error!("DMA0_CHANNEL0: error");
+//         }
+
+//         let all_if = 0x0F_u32 << (4 * ch_num);
+//         regs.intc.write(|w| unsafe { w.bits(all_if) });
+
+//         self.signal.store(true, atomic_polyfill::Ordering::Relaxed);
+//         self.waker.wake();
+//     }
+// }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -118,14 +148,19 @@ where
     });
 
     unsafe {
-        configure_channel(
-            C::Instance::regs(),
-            C::number(),
-            dest as *const (),
-            src as *const (),
-            ctrl_reg_val,
-            count,
-        );
+        C::state().with(|inner| {
+            inner.signal = false;
+            inner.waker = WakerRegistration::new();
+            configure_channel(
+                C::Instance::regs(),
+                C::number(),
+                dest as *const (),
+                src as *const (),
+                ctrl_reg_val,
+                count,
+            );
+        });
+        
     }
 
     into_ref!(ch);
@@ -181,14 +216,19 @@ where
     });
 
     unsafe {
-        configure_channel(
-            C::Instance::regs(),
-            C::number(),
-            dest as *const (),
-            src as *const (),
-            ctrl_reg_val,
-            count,
-        );
+
+        C::state().with(|inner| {
+            inner.signal = false;
+            inner.waker = WakerRegistration::new();
+            configure_channel(
+                C::Instance::regs(),
+                C::number(),
+                dest as *const (),
+                src as *const (),
+                ctrl_reg_val,
+                count,
+            );
+        });
     }
 
     into_ref!(ch);
@@ -224,25 +264,13 @@ impl<'a, C: Channel> Future for Transfer<'a, C> {
     type Output = Result<(), Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let channel = C::number();
-        let inst = C::Instance::regs();
-        let gifx = 1_u32 << (4 * channel);
 
-        critical_section::with(|cs| {
-            let intf = inst.intf.read();
-            if intf.bits() & gifx != 0 {
-                //clear all channel interrupt flags
-                let all_if = 0x0F_u32 << (4 * channel);
-                inst.intc.write(|w| unsafe { w.bits(all_if) });
-
-                let errif = 1_u32 << (4 * channel + 3);
-                if intf.bits() & errif != 0 {
-                    Poll::Ready(Err(Error::TransferError))
-                } else {
-                    Poll::Ready(Ok(()))
-                }
+        let channel_state = C::state();
+        channel_state.with(|inner| {
+            if inner.signal {
+                Poll::Ready(Ok(()))
             } else {
-                C::Instance::wakers()[channel as usize].register(cx.waker(), cs);
+                inner.waker.register(cx.waker());
                 Poll::Pending
             }
         })
@@ -304,7 +332,7 @@ impl Word for u32 {
 }
 
 pub trait Instance: Peripheral<P = Self> + crate::cctl::CCTLPeripherial + 'static {
-    fn wakers() -> &'static [waker::DmaWaker];
+    //fn wakers() -> &'static [waker::DmaWaker];
 
     fn regs() -> &'static crate::pac::dma0::RegisterBlock;
 }
@@ -314,16 +342,17 @@ pub trait Channel: Peripheral<P = Self> + 'static {
     type Interrupt: crate::interrupt::Interrupt;
 
     fn number() -> u8;
+    fn state() -> &'static ChannelState<Self::Interrupt>;
 }
 
 macro_rules! impl_dma {
     ($type:ident, $pac_type:ident, $num_channels:expr) => {
         impl crate::dma::Instance for peripherals::$type {
-            fn wakers() -> &'static [crate::dma::waker::DmaWaker] {
-                const NEW_AW: crate::dma::waker::DmaWaker = crate::dma::waker::DmaWaker::new();
-                static WAKERS: [crate::dma::waker::DmaWaker; $num_channels] = [NEW_AW; $num_channels];
-                &WAKERS
-            }
+            // fn wakers() -> &'static [crate::dma::waker::DmaWaker] {
+            //     const NEW_AW: crate::dma::waker::DmaWaker = crate::dma::waker::DmaWaker::new();
+            //     static WAKERS: [crate::dma::waker::DmaWaker; $num_channels] = [NEW_AW; $num_channels];
+            //     &WAKERS
+            // }
 
             fn regs() -> &'static crate::pac::dma0::RegisterBlock {
                 unsafe { &*(crate::pac::$pac_type::ptr() as *const crate::pac::dma0::RegisterBlock) }
@@ -340,6 +369,11 @@ macro_rules! impl_dma_channel {
 
             fn number() -> u8 {
                 $ch
+            }
+
+            fn state() -> &'static crate::dma::ChannelState<crate::interrupt::$irq> {
+                static STATE: crate::dma::ChannelState<crate::interrupt::$irq> = crate::dma::ChannelState::new();
+                &STATE
             }
         }
     };
@@ -391,7 +425,7 @@ unsafe fn DMA0_CHANNEL0() {
     let all_if = 0x0F_u32 << (4 * 0);
     inst.intc.write(|w| unsafe { w.bits(all_if) });
 
-    crate::chip::peripherals::DMA0::wakers()[0].wake();
+    crate::chip::peripherals::DMA0_CH0::state().interrupt();
 }
 
 #[interrupt]
@@ -406,7 +440,7 @@ unsafe fn DMA0_CHANNEL1() {
     let all_if = 0x0F_u32 << (4 * 1);
     inst.intc.write(|w| unsafe { w.bits(all_if) });
 
-    crate::chip::peripherals::DMA0::wakers()[1].wake();
+    crate::chip::peripherals::DMA0_CH1::state().interrupt();
 }
 
 #[interrupt]
@@ -421,7 +455,7 @@ unsafe fn DMA0_CHANNEL2() {
     let all_if = 0x0F_u32 << (4 * 2);
     inst.intc.write(|w| unsafe { w.bits(all_if) });
 
-    crate::chip::peripherals::DMA0::wakers()[2].wake();
+    crate::chip::peripherals::DMA0_CH2::state().interrupt();
 }
 
 #[interrupt]
@@ -436,7 +470,7 @@ unsafe fn DMA0_CHANNEL3() {
     let all_if = 0x0F_u32 << (4 * 3);
     inst.intc.write(|w| unsafe { w.bits(all_if) });
 
-    crate::chip::peripherals::DMA0::wakers()[3].wake();
+    crate::chip::peripherals::DMA0_CH3::state().interrupt();
 }
 
 #[interrupt]
@@ -451,7 +485,7 @@ unsafe fn DMA0_CHANNEL4() {
     let all_if = 0x0F_u32 << (4 * 4);
     inst.intc.write(|w| unsafe { w.bits(all_if) });
 
-    crate::chip::peripherals::DMA0::wakers()[4].wake();
+    crate::chip::peripherals::DMA0_CH4::state().interrupt();
 }
 
 #[interrupt]
@@ -466,7 +500,7 @@ unsafe fn DMA0_CHANNEL5() {
     let all_if = 0x0F_u32 << (4 * 5);
     inst.intc.write(|w| unsafe { w.bits(all_if) });
 
-    crate::chip::peripherals::DMA0::wakers()[5].wake();
+    crate::chip::peripherals::DMA0_CH5::state().interrupt();
 }
 
 #[interrupt]
@@ -481,5 +515,5 @@ unsafe fn DMA0_CHANNEL6() {
     let all_if = 0x0F_u32 << (4 * 6);
     inst.intc.write(|w| unsafe { w.bits(all_if) });
 
-    crate::chip::peripherals::DMA0::wakers()[6].wake();
+    crate::chip::peripherals::DMA0_CH6::state().interrupt();
 }
