@@ -113,7 +113,8 @@ where
     read_inner(ch, src, dest, count, crate::pac::dma0::ch0ctl::PNAGA_A::INCREMENT)
 }
 
-/// Repeatedly read from a peripheral device.
+/// Read from a peripheral device and repeatly write to the same dest address. The `src` address is the memory-mapped 
+/// peripheral register address to read from. The `dest` address will be repeatally written to.
 pub fn read_repeated<'a, C: Channel, S, D>(ch: PeripheralRef<'a, C>, src: *const S, dest: *mut D, count: u16) -> Transfer<'a, C>
 where
     C: Channel,

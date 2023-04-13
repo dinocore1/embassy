@@ -305,16 +305,19 @@ impl<'d, T: Instance> Spi<'d, T> {
         Rx: RxDma<T>,
     {
         let regs = T::regs();
+
+        self.set_word_size(W::FF16);
+
         let count: u16 = rx.len().try_into().map_err(|_| Error::BufLen)?;
 
         // configure DMA transfers
         let dma_write = crate::dma::write_repeated(tx_dma, W::default(), regs.data.as_ptr(), count);
         let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
 
+        let _enable_guard = EnableGuard::new(regs);
+
         // enable DMA transfer mode
         regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
-
-        let _enable_guard = EnableGuard::new(regs);
 
         futures::try_join!(dma_write, dma_read)?;
         Ok(())
@@ -332,6 +335,9 @@ impl<'d, T: Instance> Spi<'d, T> {
         Rx: RxDma<T>,
     {
         let regs = T::regs();
+
+        self.set_word_size(W::FF16);
+
         let count: u16 = tx.len().try_into().map_err(|_| Error::BufLen)?;
 
         let mut rx = [0_u8];
@@ -340,10 +346,10 @@ impl<'d, T: Instance> Spi<'d, T> {
         let dma_write = crate::dma::write(tx_dma, tx.as_ptr(), regs.data.as_ptr(), count);
         let dma_read = crate::dma::read_repeated(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
 
+        let _enable_guard = EnableGuard::new(regs);
+
         // enable DMA transfer mode
         regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
-
-        let _enable_guard = EnableGuard::new(regs);
 
         futures::try_join!(dma_write, dma_read)?;
         Ok(())
@@ -375,10 +381,10 @@ impl<'d, T: Instance> Spi<'d, T> {
         let dma_write = crate::dma::write(tx_dma, tx.as_ptr(), regs.data.as_ptr(), count);
         let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
 
+        let _enable_guard = EnableGuard::new(regs);
+
         // enable DMA transfer mode
         regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
-
-        let _enable_guard = EnableGuard::new(regs);
 
         futures::try_join!(dma_write, dma_read)?;
         Ok(())
