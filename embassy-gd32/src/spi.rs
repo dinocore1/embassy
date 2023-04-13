@@ -390,6 +390,43 @@ impl<'d, T: Instance> Spi<'d, T> {
         Ok(())
     }
 
+    pub fn blocking_write<W>(&mut self, tx: &[W]) -> Result<(), Error>
+    where
+        W: Word
+    {
+        let regs = T::regs();
+
+        self.set_word_size(W::FF16);
+        let _enable_guard = EnableGuard::new(regs);
+        let len = tx.len();
+        for i in 0..len {
+            let wb = tx.get(i).copied().unwrap_or_default();
+            let _rb = transfer_word(regs, wb)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn blocking_read<W>(&mut self, rx: &mut [W]) -> Result<(), Error>
+    where
+        W: Word
+    {
+        let regs = T::regs();
+
+        self.set_word_size(W::FF16);
+        let _enable_guard = EnableGuard::new(regs);
+        let len = rx.len();
+        for i in 0..len {
+            let wb = W::zero();
+            let rb = transfer_word::<W>(regs, wb)?;
+            if let Some(r) = rx.get_mut(i) {
+                *r = rb;
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn blocking_transfer_in_place<W>(&mut self, buf: &mut [W]) -> Result<(), Error>
     where
         W: Word,
@@ -419,7 +456,7 @@ impl<'d, T: Instance> Spi<'d, T> {
 
         let len = tx.len().max(rx.len());
         for i in 0..len {
-            let wb = rx.get(i).copied().unwrap_or_default();
+            let wb = tx.get(i).copied().unwrap_or_default();
             let rb = transfer_word(regs, wb)?;
             if let Some(r) = rx.get_mut(i) {
                 *r = rb;
@@ -453,16 +490,23 @@ pub(crate) mod sealed {
     pub trait Word: Copy + 'static {
         const WORDSIZE: WordSize;
         const FF16: crate::pac::spi0::ctl0::FF16_A;
+        fn zero() -> Self;
     }
 
     impl Word for u8 {
         const WORDSIZE: WordSize = WordSize::Bit8;
         const FF16: crate::pac::spi0::ctl0::FF16_A = crate::pac::spi0::ctl0::FF16_A::EIGHT_BIT;
+        fn zero() -> Self {
+            0_u8
+        }
     }
 
     impl Word for u16 {
         const WORDSIZE: WordSize = WordSize::Bit16;
         const FF16: crate::pac::spi0::ctl0::FF16_A = crate::pac::spi0::ctl0::FF16_A::SIXTEEN_BIT;
+        fn zero() -> Self {
+            0_u16
+        }
     }
 
     #[derive(Clone, Copy, PartialEq, PartialOrd)]
