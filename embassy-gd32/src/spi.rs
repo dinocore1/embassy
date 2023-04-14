@@ -7,7 +7,7 @@ use embassy_hal_common::{into_ref, PeripheralRef};
 pub use embedded_hal_02::spi as hal;
 use embedded_hal_02::spi::{Phase, Polarity};
 
-use self::sealed::EnableGuard;
+use self::sealed::{DMAEnableGuard};
 use crate::chip::peripherals;
 use crate::interrupt::{Interrupt, InterruptExt};
 use crate::pac::spi0::RegisterBlock as Regs;
@@ -174,6 +174,7 @@ impl<'d, T: Instance> Spi<'d, T> {
         sck: impl Peripheral<P = impl SckPin<T>> + 'd,
         mosi: impl Peripheral<P = impl MosiPin<T>> + 'd,
         miso: impl Peripheral<P = impl MisoPin<T>> + 'd,
+        nss: Option<impl Peripheral<P = impl NSSPin<T>> + 'd>,
         config: Config,
     ) -> Self {
         into_ref!(spi, sck, miso, mosi);
@@ -216,6 +217,16 @@ impl<'d, T: Instance> Spi<'d, T> {
             let w = w.ro().clear_bit();
             let w = w.bden().clear_bit();
 
+            w
+        });
+
+        r.ctl1.write(|w| {
+            
+            let w = match nss {
+                Some(_) => w.nssdrv().set_bit(),
+                None => w.nssdrv().clear_bit(),
+            };
+            
             w
         });
 
@@ -293,6 +304,20 @@ impl<'d, T: Instance> Spi<'d, T> {
         self.current_word_size = word_size;
     }
 
+    pub fn enable(&mut self) {
+        // enable SPI
+        T::regs().ctl0.modify(|_, w| w.spien().set_bit());
+    }
+
+    pub fn disable(&mut self) {
+        // disable SPI
+        T::regs().ctl0.modify(|_, w| w.spien().clear_bit());
+    }
+
+    pub fn enable_guard<'a>(&self) -> EnableGuard<'a> {
+        EnableGuard::new(T::regs())
+    }
+
     pub async fn read<'a, W, Tx, Rx>(
         &mut self,
         tx_dma: PeripheralRef<'a, Tx>,
@@ -314,10 +339,7 @@ impl<'d, T: Instance> Spi<'d, T> {
         let dma_write = crate::dma::write_repeated(tx_dma, W::default(), regs.data.as_ptr(), count);
         let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
 
-        let _enable_guard = EnableGuard::new(regs);
-
-        // enable DMA transfer mode
-        regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
+        let _enable_guard = DMAEnableGuard::new(regs);
 
         futures::try_join!(dma_write, dma_read)?;
         Ok(())
@@ -346,10 +368,7 @@ impl<'d, T: Instance> Spi<'d, T> {
         let dma_write = crate::dma::write(tx_dma, tx.as_ptr(), regs.data.as_ptr(), count);
         let dma_read = crate::dma::read_repeated(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
 
-        let _enable_guard = EnableGuard::new(regs);
-
-        // enable DMA transfer mode
-        regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
+        let _enable_guard = DMAEnableGuard::new(regs);
 
         futures::try_join!(dma_write, dma_read)?;
         Ok(())
@@ -381,10 +400,7 @@ impl<'d, T: Instance> Spi<'d, T> {
         let dma_write = crate::dma::write(tx_dma, tx.as_ptr(), regs.data.as_ptr(), count);
         let dma_read = crate::dma::read(rx_dma, regs.data.as_ptr(), rx.as_mut_ptr(), count);
 
-        let _enable_guard = EnableGuard::new(regs);
-
-        // enable DMA transfer mode
-        regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
+        let _enable_guard = DMAEnableGuard::new(regs);
 
         futures::try_join!(dma_write, dma_read)?;
         Ok(())
@@ -467,6 +483,34 @@ impl<'d, T: Instance> Spi<'d, T> {
     }
 }
 
+pub struct EnableGuard<'a> {
+    regs: &'a crate::pac::spi0::RegisterBlock,
+}
+
+impl<'a> EnableGuard<'a> {
+    pub fn new(regs: &'a crate::pac::spi0::RegisterBlock) -> Self {
+        let guard = Self { regs };
+        guard.enable();
+        guard
+    }
+
+    pub fn enable(&self) {
+        // enable SPI
+        self.regs.ctl0.modify(|_, w| w.spien().set_bit());
+    }
+
+    pub fn disable(&self) {
+        // disable SPI
+        self.regs.ctl0.modify(|_, w| w.spien().clear_bit());
+    }
+}
+
+impl<'a> Drop for EnableGuard<'a> {
+    fn drop(&mut self) {
+        self.disable();
+    }
+}
+
 pub(crate) mod sealed {
     use embassy_sync::waitqueue::AtomicWaker;
 
@@ -524,11 +568,11 @@ pub(crate) mod sealed {
         }
     }
 
-    pub struct EnableGuard<'a> {
+    pub struct DMAEnableGuard<'a> {
         regs: &'a crate::pac::spi0::RegisterBlock,
     }
 
-    impl<'a> EnableGuard<'a> {
+    impl<'a> DMAEnableGuard<'a> {
         pub fn new(regs: &'a crate::pac::spi0::RegisterBlock) -> Self {
             let guard = Self { regs };
             guard.enable();
@@ -536,17 +580,17 @@ pub(crate) mod sealed {
         }
 
         pub fn enable(&self) {
-            // enable SPI
-            self.regs.ctl0.modify(|_, w| w.spien().set_bit());
+            // enable DMA transfer mode
+            self.regs.ctl1.modify(|_, w| w.dmaten().set_bit().dmaren().set_bit());
         }
 
         pub fn disable(&self) {
-            // disable SPI
-            self.regs.ctl0.modify(|_, w| w.spien().clear_bit());
+            // disable DMA transfer mode
+            self.regs.ctl1.modify(|_, w| w.dmaten().clear_bit().dmaren().clear_bit());
         }
     }
 
-    impl<'a> Drop for EnableGuard<'a> {
+    impl<'a> Drop for DMAEnableGuard<'a> {
         fn drop(&mut self) {
             self.disable();
         }
@@ -560,6 +604,7 @@ impl Word for u16 {}
 pin_trait!(SckPin, Instance);
 pin_trait!(MosiPin, Instance);
 pin_trait!(MisoPin, Instance);
+pin_trait!(NSSPin, Instance);
 
 dma_trait!(TxDma, Instance);
 dma_trait!(RxDma, Instance);

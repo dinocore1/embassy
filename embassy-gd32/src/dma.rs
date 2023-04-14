@@ -6,9 +6,7 @@ use core::marker::PhantomData;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
-use atomic_polyfill::AtomicBool;
 use embassy_cortex_m::interrupt::Interrupt;
-use embassy_cortex_m::peripheral::PeripheralState;
 use embassy_hal_common::{into_ref, PeripheralRef};
 use embassy_sync::waitqueue::WakerRegistration;
 use crate::cctl::CCTLPeripherial;

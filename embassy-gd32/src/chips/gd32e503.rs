@@ -117,10 +117,12 @@ impl_pin!(PC15, 2, 15);
 pin_trait_impl!(crate::spi::SckPin, SPI0, PA5);
 pin_trait_impl!(crate::spi::MisoPin, SPI0, PA6);
 pin_trait_impl!(crate::spi::MosiPin, SPI0, PA7);
+pin_trait_impl!(crate::spi::NSSPin, SPI0, PA4);
 
 pin_trait_impl!(crate::spi::SckPin, SPI1, PB13);
 pin_trait_impl!(crate::spi::MisoPin, SPI1, PB14);
 pin_trait_impl!(crate::spi::MosiPin, SPI1, PB15);
+pin_trait_impl!(crate::spi::NSSPin, SPI1, PA12);
 
 impl_spi!(SPI0, SPI0, SPI0);
 impl_spi!(SPI1, SPI1, SPI1);
