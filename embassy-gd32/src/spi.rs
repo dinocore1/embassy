@@ -220,15 +220,13 @@ impl<'d, T: Instance> Spi<'d, T> {
             w
         });
 
-        r.ctl1.write(|w| {
-            
-            let w = match nss {
-                Some(_) => w.nssdrv().set_bit(),
-                None => w.nssdrv().clear_bit(),
-            };
-            
-            w
-        });
+        if let Some(nss) = nss {
+            into_ref!(nss);
+            nss.set_as_output(crate::gpio::OutputType::AFPushPull, crate::gpio::Speed::Low);
+            r.ctl1.write(|w| {
+                w.nssdrv().set_bit()
+            });
+        }
 
         Self {
             _p: spi,
