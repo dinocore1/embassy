@@ -203,4 +203,5 @@ pub mod irqs {
     declare!(DMA1_CHANNEL1);
     declare!(DMA1_CHANNEL2);
     declare!(DMA1_CHANNEL3_DMA1_CHANNEL4);
+    declare!(EXTI_LINE9_5);
 }

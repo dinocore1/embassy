@@ -54,7 +54,7 @@ mod timedriver_rtc;
 pub use embassy_cortex_m::systick::systick_timedriver_interrupt;
 
 pub use embassy_cortex_m::executor;
-pub use embassy_cortex_m::interrupt::_export::interrupt;
+pub use embassy_cortex_m::interrupt::_export::*;
 pub use embassy_hal_common::{into_ref, Peripheral, PeripheralRef};
 #[cfg(any(feature = "timedriver-rtc", feature = "timedriver-systick"))]
 pub use embassy_time::*;
