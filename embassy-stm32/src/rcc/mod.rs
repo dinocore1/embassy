@@ -23,7 +23,7 @@ use crate::time::Hertz;
 mod _version;
 pub use _version::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, defmt::Format)]
 pub struct Clocks {
     pub sys: Hertz,
 

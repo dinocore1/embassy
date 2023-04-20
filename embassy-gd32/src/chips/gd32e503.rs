@@ -70,49 +70,67 @@ embassy_hal_common::peripherals! {
     DMA1_CH2,
     DMA1_CH3,
     DMA1_CH4,
+
+    EXTI0,
+    EXTI1,
+    EXTI2,
+    EXTI3,
+    EXTI4,
+    EXTI5,
+    EXTI6,
+    EXTI7,
+    EXTI8,
+    EXTI9,
+    EXTI10,
+    EXTI11,
+    EXTI12,
+    EXTI13,
+    EXTI14,
+    EXTI15,
+
 }
 
 impl_gpio!(GPIOA, crate::gpio::GPIOPort::A);
 impl_gpio!(GPIOB, crate::gpio::GPIOPort::B);
 impl_gpio!(GPIOC, crate::gpio::GPIOPort::C);
 
-impl_pin!(PA0, 0, 0);
-impl_pin!(PA1, 0, 1);
-impl_pin!(PA2, 0, 2);
-impl_pin!(PA3, 0, 3);
-impl_pin!(PA4, 0, 4);
-impl_pin!(PA5, 0, 5);
-impl_pin!(PA6, 0, 6);
-impl_pin!(PA7, 0, 7);
-impl_pin!(PA8, 0, 8);
-impl_pin!(PA9, 0, 9);
-impl_pin!(PA10, 0, 10);
-impl_pin!(PA11, 0, 11);
-impl_pin!(PA12, 0, 12);
-impl_pin!(PA13, 0, 13);
-impl_pin!(PA14, 0, 14);
-impl_pin!(PA15, 0, 15);
+impl_pin!(PA0, 0, 0, EXTI0);
+impl_pin!(PA1, 0, 1, EXTI1);
+impl_pin!(PA2, 0, 2, EXTI2);
+impl_pin!(PA3, 0, 3, EXTI3);
+impl_pin!(PA4, 0, 4, EXTI4);
+impl_pin!(PA5, 0, 5, EXTI5);
+impl_pin!(PA6, 0, 6, EXTI6);
+impl_pin!(PA7, 0, 7, EXTI7);
+impl_pin!(PA8, 0, 8, EXTI8);
+impl_pin!(PA9, 0, 9, EXTI9);
+impl_pin!(PA10, 0, 10, EXTI10);
+impl_pin!(PA11, 0, 11, EXTI11);
+impl_pin!(PA12, 0, 12, EXTI12);
+impl_pin!(PA13, 0, 13, EXTI13);
+impl_pin!(PA14, 0, 14, EXTI14);
+impl_pin!(PA15, 0, 15, EXTI15);
 
-impl_pin!(PB0, 1, 0);
-impl_pin!(PB1, 1, 1);
-impl_pin!(PB2, 1, 2);
-impl_pin!(PB3, 1, 3);
-impl_pin!(PB4, 1, 4);
-impl_pin!(PB5, 1, 5);
-impl_pin!(PB6, 1, 6);
-impl_pin!(PB7, 1, 7);
-impl_pin!(PB8, 1, 8);
-impl_pin!(PB9, 1, 9);
-impl_pin!(PB10, 1, 10);
-impl_pin!(PB11, 1, 11);
-impl_pin!(PB12, 1, 12);
-impl_pin!(PB13, 1, 13);
-impl_pin!(PB14, 1, 14);
-impl_pin!(PB15, 1, 15);
+impl_pin!(PB0, 1, 0, EXTI0);
+impl_pin!(PB1, 1, 1, EXTI1);
+impl_pin!(PB2, 1, 2, EXTI2);
+impl_pin!(PB3, 1, 3, EXTI3);
+impl_pin!(PB4, 1, 4, EXTI4);
+impl_pin!(PB5, 1, 5, EXTI5);
+impl_pin!(PB6, 1, 6, EXTI6);
+impl_pin!(PB7, 1, 7, EXTI7);
+impl_pin!(PB8, 1, 8, EXTI8);
+impl_pin!(PB9, 1, 9, EXTI9);
+impl_pin!(PB10, 1, 10, EXTI10);
+impl_pin!(PB11, 1, 11, EXTI11);
+impl_pin!(PB12, 1, 12, EXTI12);
+impl_pin!(PB13, 1, 13, EXTI13);
+impl_pin!(PB14, 1, 14, EXTI14);
+impl_pin!(PB15, 1, 15, EXTI15);
 
-impl_pin!(PC13, 2, 13);
-impl_pin!(PC14, 2, 14);
-impl_pin!(PC15, 2, 15);
+impl_pin!(PC13, 2, 13, EXTI13);
+impl_pin!(PC14, 2, 14, EXTI14);
+impl_pin!(PC15, 2, 15, EXTI15);
 
 pin_trait_impl!(crate::spi::SckPin, SPI0, PA5);
 pin_trait_impl!(crate::spi::MisoPin, SPI0, PA6);

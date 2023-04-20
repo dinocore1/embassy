@@ -195,7 +195,7 @@ pub(crate) mod sealed {
         }
 
         #[inline]
-        fn _port(&self) -> u8 {
+        fn port(&self) -> u8 {
             self.pin_port() / 16
         }
 
@@ -287,6 +287,8 @@ pub(crate) mod sealed {
 }
 
 pub trait Pin: Peripheral<P = Self> + Into<AnyPin> + sealed::Pin + Sized + 'static {
+    type ExtiChannel: crate::exti::Channel;
+
     #[inline]
     fn degrade(self) -> AnyPin {
         AnyPin {
@@ -300,7 +302,9 @@ pub struct AnyPin {
 }
 
 embassy_hal_common::impl_peripheral!(AnyPin);
-impl Pin for AnyPin {}
+impl Pin for AnyPin {
+    type ExtiChannel = crate::exti::AnyChannel;
+}
 impl sealed::Pin for AnyPin {
     #[inline]
     fn pin_port(&self) -> u8 {
@@ -309,8 +313,10 @@ impl sealed::Pin for AnyPin {
 }
 
 macro_rules! impl_pin {
-    ($name:ident, $port_num:expr, $pin_num:expr) => {
-        impl crate::gpio::Pin for peripherals::$name {}
+    ($name:ident, $port_num:expr, $pin_num:expr, $exti_ch:ident) => {
+        impl crate::gpio::Pin for peripherals::$name {
+            type ExtiChannel = peripherals::$exti_ch;
+        }
         impl crate::gpio::sealed::Pin for peripherals::$name {
             #[inline]
             fn pin_port(&self) -> u8 {

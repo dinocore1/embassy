@@ -1,7 +1,7 @@
 //! Time units
 
 /// Hertz
-#[derive(PartialEq, PartialOrd, Clone, Copy, Debug, Eq)]
+#[derive(PartialEq, PartialOrd, Clone, Copy, Debug, Eq, defmt::Format)]
 pub struct Hertz(pub u32);
 
 impl Hertz {

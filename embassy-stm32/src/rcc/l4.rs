@@ -497,5 +497,13 @@ pub(crate) unsafe fn init(config: Config) {
         apb2: Hertz(apb2_freq),
         apb1_tim: Hertz(apb1_tim_freq),
         apb2_tim: Hertz(apb2_tim_freq),
-    });
+    };
+
+    info!("freqs: {:?}", clocks);
+
+    set_freqs(clocks);
+
+
+    
+
 }
