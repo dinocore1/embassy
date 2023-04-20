@@ -82,7 +82,7 @@ pub fn init(config: Config) -> chip::Peripherals {
     timedriver_rtc::init();
 
     #[cfg(feature = "timedriver-systick")]
-    embassy_cortex_m::systick::init(*cctl::get_freq().ahb.as_ref() as u64);
+    embassy_cortex_m::systick::init(((*cctl::get_freq().ahb.as_ref()) / 8) as u64);
 
     chip::Peripherals::take()
 }
