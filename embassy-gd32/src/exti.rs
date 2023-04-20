@@ -52,7 +52,7 @@ impl<'a> ExtiInputFuture<'a> {
 
             //TODO: set the GPIO exti source select
 
-            let mut exti = crate::pac::EXTI { _marker: PhantomData };
+            let exti = unsafe { crate::pac::Peripherals::steal().EXTI };
             let v = 1_u32 << pin;
 
             #[inline]
@@ -94,7 +94,7 @@ impl<'a> Future for ExtiInputFuture<'a> {
 
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
         
-        let mut exti = crate::pac::EXTI { _marker: PhantomData };
+        let exti = unsafe { crate::pac::Peripherals::steal().EXTI };
 
         EXTI_WAKERS[self.pin as usize].register(cx.waker());
         let v = 1_u32 << self.pin;

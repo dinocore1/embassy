@@ -202,7 +202,7 @@ pub(crate) mod sealed {
         #[inline]
         fn block(&self) -> &gpio::RegisterBlock {
             unsafe {
-                match self._port() {
+                match self.port() {
                     0 => &*crate::pac::GPIOA::ptr(),
                     1 => &*(crate::pac::GPIOB::ptr() as *const gpio::RegisterBlock),
                     2 => &*(crate::pac::GPIOC::ptr() as *const gpio::RegisterBlock),
