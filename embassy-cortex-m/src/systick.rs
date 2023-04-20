@@ -25,7 +25,23 @@ impl SystickDriver {
             alarms: UnsafeCell::new([ALARM_NEW ; ALARM_COUNT]),
         }
     }
+
+    fn lock<F>(&self, f: F)
+    where F: FnOnce(&mut [AlarmState]) {
+        let p = unsafe { cortex_m::Peripherals::steal() };
+        let mut syst = p.SYST;
+        let alarms = unsafe { &mut *self.alarms.get() };
+        
+
+        syst.disable_interrupt();
+        f(alarms);
+        syst.enable_interrupt();
+
+    }
 }
+
+unsafe impl Send for SystickDriver{}
+unsafe impl Sync for SystickDriver{}
 
 struct AlarmState {
     ts: u64,
@@ -78,8 +94,7 @@ impl Driver for SystickDriver {
     }
 
     fn set_alarm_callback(&self, alarm: AlarmHandle, callback: fn(*mut ()), ctx: *mut ()) {
-        self.alarms.lock(|alarms| {
-            let alarms = unsafe { &mut *alarms.get() };
+        self.lock(|alarms| {
             let alarm = &mut alarms[alarm.id() as usize];
             alarm.callback = callback as *const ();
             alarm.ctx = ctx;

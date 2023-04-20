@@ -414,7 +414,7 @@ impl crate::cctl::CCTLPeripherial for crate::peripherals::DMA1 {
 
 #[interrupt]
 unsafe fn DMA0_CHANNEL0() {
-    debug!("DMA0_CHANNEL0");
+    //debug!("DMA0_CHANNEL0");
     let mut inst = &*crate::pac::DMA0::ptr();
     let intf = inst.intf.read();
     if intf.errif0().bit_is_set() {
@@ -429,7 +429,7 @@ unsafe fn DMA0_CHANNEL0() {
 
 #[interrupt]
 unsafe fn DMA0_CHANNEL1() {
-    debug!("DMA0_CHANNEL1");
+    //debug!("DMA0_CHANNEL1");
     let inst = &*crate::pac::DMA0::ptr();
     let intf = inst.intf.read();
     if intf.errif1().bit_is_set() {
@@ -444,7 +444,7 @@ unsafe fn DMA0_CHANNEL1() {
 
 #[interrupt]
 unsafe fn DMA0_CHANNEL2() {
-    debug!("DMA0_CHANNEL2");
+    //debug!("DMA0_CHANNEL2");
     let inst = &*crate::pac::DMA0::ptr();
     let intf = inst.intf.read();
     if intf.errif2().bit_is_set() {
@@ -459,7 +459,7 @@ unsafe fn DMA0_CHANNEL2() {
 
 #[interrupt]
 unsafe fn DMA0_CHANNEL3() {
-    debug!("DMA0_CHANNEL3");
+    //debug!("DMA0_CHANNEL3");
     let inst = &*crate::pac::DMA0::ptr();
     let intf = inst.intf.read();
     if intf.errif3().bit_is_set() {
@@ -474,7 +474,7 @@ unsafe fn DMA0_CHANNEL3() {
 
 #[interrupt]
 unsafe fn DMA0_CHANNEL4() {
-    debug!("DMA0_CHANNEL4");
+    //debug!("DMA0_CHANNEL4");
     let inst = &*crate::pac::DMA0::ptr();
     let intf = inst.intf.read();
     if intf.errif4().bit_is_set() {

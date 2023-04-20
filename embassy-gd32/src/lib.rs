@@ -48,10 +48,13 @@ pub mod interrupt {
 #[cfg(feature = "timedriver-rtc")]
 mod timedriver_rtc;
 
+#[cfg(feature = "timedriver-systick")]
+pub use embassy_cortex_m::systick::systick_timedriver_interrupt;
+
 pub use embassy_cortex_m::executor;
 pub use embassy_cortex_m::interrupt::_export::interrupt;
 pub use embassy_hal_common::{into_ref, Peripheral, PeripheralRef};
-#[cfg(feature = "timedriver-rtc")]
+#[cfg(any(feature = "timedriver-rtc", feature = "timedriver-systick"))]
 pub use embassy_time::*;
 
 pub use cortex_m;
@@ -77,13 +80,7 @@ pub fn init(config: Config) -> chip::Peripherals {
     timedriver_rtc::init();
 
     #[cfg(feature = "timedriver-systick")]
-    embassy_cortex_m::systick::init(cctl::get_freq().ck_ahb);
+    embassy_cortex_m::systick::init(*cctl::get_freq().ahb.as_ref() as u64);
 
     chip::Peripherals::take()
-}
-
-#[cfg(feature = "timedriver-systick")]
-#[cortex_m::interrupt]
-fn SysTick() {
-    embassy_cortex_m::systick::systick_timedriver_interrupt();
 }
