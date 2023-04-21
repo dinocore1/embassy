@@ -4,13 +4,24 @@ use core::task::Poll;
 
 use embassy_sync::waitqueue::AtomicWaker;
 use futures::Future;
+
 use crate::pac::EXTI;
 use crate::gpio::{AnyPin, Input, Pin as GpioPin};
 use crate::{peripherals, Peripheral};
 
+pub use crate::pac::AFIO;
+
 const EXTI_COUNT: usize = 16;
 const NEW_AW: AtomicWaker = AtomicWaker::new();
 static EXTI_WAKERS: [AtomicWaker; EXTI_COUNT] = [NEW_AW; EXTI_COUNT];
+
+pub fn steal_AFIO() -> AFIO {
+    unsafe { crate::pac::Peripherals::steal().AFIO }
+}
+
+pub fn steal_EXTI() -> EXTI {
+    unsafe { crate::pac::Peripherals::steal().EXTI }
+}
 
 /// EXTI input driver
 pub struct ExtiInput<'d, T: GpioPin> {
