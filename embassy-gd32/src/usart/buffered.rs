@@ -189,6 +189,17 @@ impl<'d, T: Instance> UartBuffered<'d, T> {
 
 }
 
+impl<'d, T: Instance> Drop for UartBuffered<'d, T> {
+    fn drop(&mut self) {
+        let regs = T::regs();
+        regs.ctl0.reset();
+        regs.ctl1.reset();
+        regs.ctl2.reset();
+        regs.ctl3.reset();
+        T::disable();
+    }
+}
+
 // impl<'d, T: Instance> core::fmt::Write for UartBuffered<'d, T>
 // {
 //     fn write_str(&mut self, s: &str) -> core::fmt::Result {
