@@ -3,11 +3,10 @@ use core::{
     cell::UnsafeCell,
     sync::atomic::Ordering,
     ptr,
+    slice,
 };
 use atomic_polyfill::{AtomicU64, AtomicU8};
 use embassy_time::driver::{Driver, AlarmHandle};
-use embassy_sync::blocking_mutex::CriticalSectionMutex;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 const ALARM_COUNT: usize = 4;
 
@@ -30,8 +29,9 @@ impl SystickDriver {
     where F: FnOnce(&mut [AlarmState]) {
         let p = unsafe { cortex_m::Peripherals::steal() };
         let mut syst = p.SYST;
-        let alarms = unsafe { &mut *self.alarms.get() };
-        
+        let alarms_ptr = unsafe { &mut *self.alarms.get() };
+        let alarms_ptr = alarms_ptr.as_mut_ptr();
+        let alarms = unsafe { slice::from_raw_parts_mut(alarms_ptr, self.alarm_count.load(Ordering::Relaxed) as usize) };
 
         syst.disable_interrupt();
         f(alarms);
@@ -115,6 +115,7 @@ impl Driver for SystickDriver {
 
 }
 
+/// initialize the SysTick Timedriver. 
 pub fn init(cpu_hertz: u64) {
     let f = cpu_hertz / embassy_time::TICK_HZ;
     let f = f as u32;
@@ -126,6 +127,7 @@ pub fn init(cpu_hertz: u64) {
     p.SYST.enable_interrupt();
 }
 
+/// Call this function from the SysTick exception handler
 #[inline]
 pub fn systick_timedriver_interrupt() {
     let ts = DRIVER.ts.fetch_add(1, Ordering::Release);
