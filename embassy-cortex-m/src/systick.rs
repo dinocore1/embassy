@@ -25,13 +25,18 @@ impl SystickDriver {
         }
     }
 
+    unsafe fn alarms(&self) -> &mut [AlarmState] {
+        let alarms_ptr = &mut *self.alarms.get();
+        let alarms_ptr = alarms_ptr.as_mut_ptr();
+        let alarms = slice::from_raw_parts_mut(alarms_ptr, self.alarm_count.load(Ordering::Relaxed) as usize);
+        alarms
+    }
+
     fn lock<F>(&self, f: F)
     where F: FnOnce(&mut [AlarmState]) {
         let p = unsafe { cortex_m::Peripherals::steal() };
         let mut syst = p.SYST;
-        let alarms_ptr = unsafe { &mut *self.alarms.get() };
-        let alarms_ptr = alarms_ptr.as_mut_ptr();
-        let alarms = unsafe { slice::from_raw_parts_mut(alarms_ptr, self.alarm_count.load(Ordering::Relaxed) as usize) };
+        let alarms = unsafe { self.alarms() };
 
         syst.disable_interrupt();
         f(alarms);
@@ -128,11 +133,10 @@ pub fn init(cpu_hertz: u64) {
 }
 
 /// Call this function from the SysTick exception handler
-#[inline]
-pub fn systick_timedriver_interrupt() {
+#[no_mangle]
+pub extern "C" fn systick_timedriver_interrupt() {
     let ts = DRIVER.ts.fetch_add(1, Ordering::Release);
-    let ts = ts + 1;
-    let alarms = unsafe { &mut *DRIVER.alarms.get() };
+    let alarms = unsafe { DRIVER.alarms() };
     for alarm in alarms {
         if alarm.ts <= ts {
             alarm.trigger();
