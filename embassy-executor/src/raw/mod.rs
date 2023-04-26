@@ -138,7 +138,9 @@ impl<F: Future + 'static> TaskStorage<F> {
     unsafe fn spawn_initialize(&'static self, future: impl FnOnce() -> F) -> NonNull<TaskHeader> {
         // Initialize the task
         self.raw.poll_fn.write(Self::poll);
-        self.future.write(future());
+        let f = future();
+        info!("size: {}", core::mem::size_of_val(&f));
+        self.future.write(f);
         NonNull::new_unchecked(self as *const TaskStorage<F> as *const TaskHeader as *mut TaskHeader)
     }
 

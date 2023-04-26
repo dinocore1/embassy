@@ -67,9 +67,8 @@ pub fn run(args: syn::AttributeArgs, f: syn::ItemFn) -> Result<TokenStream, Toke
         #visibility fn #task_ident(#fargs) -> ::embassy_executor::SpawnToken<impl Sized> {
             type Fut = impl ::core::future::Future + 'static;
             static POOL: ::embassy_executor::raw::TaskPool<Fut, #pool_size> = ::embassy_executor::raw::TaskPool::new();
-            let r = unsafe { POOL._spawn_async_fn(move || #task_inner_ident(#(#arg_names,)*)) };
-            info!("task {} size: {}",  { let #task_ident = 10; }, core::mem::size_of_val(&r));
-            r
+            info!("task {}",  stringify!(#task_ident));
+            unsafe { POOL._spawn_async_fn(move || #task_inner_ident(#(#arg_names,)*)) }
         }
     };
 
