@@ -45,5 +45,5 @@ embassy-time = { version = "0.1.0", path = "../embassy-time", optional = true }
 atomic-polyfill = "1.0.1"
 critical-section = "1.1"
 cfg-if = "1.0.0"
-cortex-m = "0.7.6"
+cortex-m = "0.7"
 
