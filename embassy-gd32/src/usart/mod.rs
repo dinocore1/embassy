@@ -132,58 +132,6 @@ impl<'d, T: Instance> Uart<'d, T> {
 
 }
 
-pub struct UartRx<'d, T: Instance> {
-    _p: PeripheralRef<'d, T>,
-}
-
-impl<'d, T: Instance> UartRx<'d, T> {
-    pub fn new(
-        p: impl Peripheral<P = T> + 'd,
-        irq: impl Peripheral<P = T::Interrupt> + 'd,
-        rx_pin: impl Peripheral<P = impl RxPin<T>> + 'd,
-        config: Config,
-    ) -> Self {
-        T::enable();
-
-        Self::new_inner(p, irq, rx_pin, config)
-    }
-
-    fn new_inner(
-        p: impl Peripheral<P = T> + 'd,
-        irq: impl Peripheral<P = T::Interrupt> + 'd,
-        rx_pin: impl Peripheral<P = impl RxPin<T>> + 'd,
-        config: Config,
-    ) -> Self {
-        into_ref!(p, irq, rx_pin);
-
-        let regs = T::regs();
-        let pclk_freq = T::frequency();
-        configure(regs, &config, pclk_freq);
-
-        irq.set_handler(Self::on_interrupt);
-        irq.unpend();
-        irq.enable();
-
-        Self {
-            _p: p,
-        }
-    }
-
-    fn on_interrupt(_: *mut ()) {
-        let regs = T::regs();
-        let s = T::state();
-
-        let stat0 = regs.stat0.read();
-
-        if stat0.rbne().bit_is_set() {
-            s.rx_waker.wake();
-
-        }
-    }
-
-
-}
-
 fn configure(regs: &Regs, config: &Config, pclk_freq: Hertz) {
     let (parity_enable, parity_mode) = match config.parity {
         Parity::ParityNone => (false, false),
