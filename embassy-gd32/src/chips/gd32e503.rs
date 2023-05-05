@@ -18,6 +18,7 @@ embassy_hal_common::peripherals! {
     GPIOB,
     GPIOC,
     FMC,
+    AFIO,
 
     PA0,
     PA1,

@@ -35,6 +35,8 @@ pub mod fmc;
 
 pub mod exti;
 
+pub mod afio;
+
 #[cfg_attr(feature = "gd32e503", path = "chips/gd32e503.rs")]
 mod chip;
 pub(crate) use chip::pac;
