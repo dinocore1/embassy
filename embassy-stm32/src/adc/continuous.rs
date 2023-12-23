@@ -62,7 +62,9 @@ where T: super::Instance,
         }
     }
 
-    pub fn start(&mut self, sample_time: SampleTime, sample_freq: Hertz, channels: u32, buf: &'d mut [u8]) {
+    pub fn start<P>(&mut self, sample_time: SampleTime, sample_freq: Hertz, pins: impl IntoIterator<Item=P>, buf: &'d mut [u8])
+    where P: AdcPin<T>,
+    {
         
 
         const TRG4_TIM15_TRGO: u8 = 0b100;
@@ -86,7 +88,12 @@ where T: super::Instance,
         });
 
         // enable selected channels
-        T::regs().chselr().write(|w| w.0 = channels);
+        T::regs().chselr().write(|w| w.0 = 0x0_u32);
+        for mut pin in pins {
+            pin.set_as_analog();
+            let channel = pin.channel();
+            T::regs().chselr().modify(|w| w.set_chselx(channel as usize, true));
+        }
 
         // set the sampling time
         T::regs().smpr().modify(|reg| reg.set_smp(sample_time.into()));
