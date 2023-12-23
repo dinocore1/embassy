@@ -1,4 +1,5 @@
 use super::*;
+use crate::dma::ReadableRingBuffer;
 use crate::time::Hertz;
 use crate::{interrupt, Peripheral};
 use embassy_hal_internal::{into_ref, PeripheralRef};
@@ -61,11 +62,12 @@ where T: super::Instance,
         }
     }
 
-    pub fn start(&mut self, sample_time: SampleTime, sample_freq: Hertz, channels: u32) {
+    pub fn start(&mut self, sample_time: SampleTime, sample_freq: Hertz, channels: u32, buf: &'d mut [u8]) {
         
 
         const TRG4_TIM15_TRGO: u8 = 0b100;
 
+        self.timer.stop();
         self.timer.set_frequency(sample_freq);
 
         // Clear the end of conversion and end of sampling flags
@@ -101,14 +103,25 @@ where T: super::Instance,
             reg.set_res(stm32_metapac::adc::vals::Res::EIGHTBIT);
         });
 
-        let mut buf = [0_u8 ; 32];
+        
         let request = self.dma_ch.request();
         let transfer_options = crate::dma::TransferOptions {
             circular: true,
             half_transfer_ir: true,
             complete_transfer_ir: false,
         };
-        //let transfer = crate::dma::Transfer::new_read(dma_ch, (), T::regs().dr().as_ptr(), &mut buf, transfer_options);
+
+        fn dr(r: crate::pac::adc::Adc) -> *mut u8 {
+            r.dr().as_ptr() as _
+        }
+
+        let mut ring_buf = unsafe { ReadableRingBuffer::new(self.dma_ch.clone_unchecked(), request, dr(T::regs()), buf, transfer_options) };
+        ring_buf.start();
+
+        T::regs().cr().modify(|reg| reg.set_aden(true));
+
+        self.timer.reset();
+        self.timer.start();
 
 
     }
