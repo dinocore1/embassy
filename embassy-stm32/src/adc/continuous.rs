@@ -55,7 +55,9 @@ where T: Instance,
         }
     }
 
-    pub fn start(&mut self, sample_time: SampleTime, sample_freq: Hertz, channels: &[]) {
+    pub fn start(&mut self, sample_time: SampleTime, sample_freq: Hertz, channels: u32, dma_ch: impl Peripheral<P = impl super::AdcDma<T>>) {
+        into_ref!(dma_ch);
+
         self.timer.set_frequency(sample_freq);
 
         // Clear the end of conversion and end of sampling flags
@@ -63,9 +65,6 @@ where T: Instance,
             reg.set_eoc(true);
             reg.set_eosmp(true);
         });
-
-        // set the sampling time
-        T::regs().smpr().modify(|reg| reg.set_smp(sample_time.into()));
 
         // turn off interrupts
         T::regs().ier().modify(|w| {
@@ -75,6 +74,29 @@ where T: Instance,
             w.set_eocie(false);
             w.set_eosmpie(false);
         });
+
+        // enable selected channels
+        T::regs().chselr().write(|w| w.0 = channels);
+
+        // set the sampling time
+        T::regs().smpr().modify(|reg| reg.set_smp(sample_time.into()));
+
+        T::regs().cfgr1().modify(|reg| {
+            reg.set_discen(false);
+            reg.set_cont(false);
+            reg.set_scandir(stm32_metapac::adc::vals::Scandir::UPWARD);
+            reg.set_dmacfg(stm32_metapac::adc::vals::Dmacfg::CIRCULAR);
+            reg.set_dmaen(true);
+        });
+
+        let mut buf = [0_u8 ; 32];
+        let request = dma_ch.request();
+        let transfer_options = crate::dma::TransferOptions {
+            circular: true,
+            half_transfer_ir: true,
+            complete_transfer_ir: false,
+        };
+        //let transfer = crate::dma::Transfer::new_read(dma_ch, (), T::regs().dr().as_ptr(), &mut buf, transfer_options);
 
 
     }
