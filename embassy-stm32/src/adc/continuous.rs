@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 use super::*;
 use crate::dma::ReadableRingBuffer;
 use crate::time::Hertz;
@@ -7,6 +9,23 @@ use embedded_hal_02::blocking::delay::DelayUs;
 use crate::interrupt::typelevel::Interrupt;
 use crate::timer::sealed::Basic16bitInstance as BasicTimer;
 
+/// Interrupt handler.
+pub struct InterruptHandler<T: Instance> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T: Instance> interrupt::typelevel::Handler<T::Interrupt> for InterruptHandler<T> {
+    unsafe fn on_interrupt() {
+        info!("on_interrupt");
+        if T::regs().isr().read().eoc() {
+            //T::regs().ier().modify(|w| w.set_eocie(false));
+        } else {
+            return;
+        }
+
+        T::state().waker.wake();
+    }
+}
 
 pub struct ContinuousAdc<'d, T, Timer, AdcDma>
 where T: super::Instance,
@@ -25,7 +44,7 @@ where T: super::Instance,
     AdcDma: super::AdcDma<T>,
 {
 
-    pub fn new(adc: impl Peripheral<P = T> + 'd, timer: impl Peripheral<P = Timer> + 'd, dma_ch: impl Peripheral<P = AdcDma> + 'd, delay: &mut impl DelayUs<u32>) -> Self {
+    pub fn new(adc: impl Peripheral<P = T> + 'd, _irq: impl interrupt::typelevel::Binding<T::Interrupt, InterruptHandler<T>> + 'd, timer: impl Peripheral<P = Timer> + 'd, dma_ch: impl Peripheral<P = AdcDma> + 'd, delay: &mut impl DelayUs<u32>) -> Self {
         into_ref!(adc, dma_ch, timer);
         T::enable_and_reset();
         Timer::enable_and_reset();
@@ -53,6 +72,7 @@ where T: super::Instance,
         //     T::regs().cr().modify(|reg| reg.set_aden(true));
         // }
 
+        unsafe { T::Interrupt::enable() };
         T::Interrupt::unpend();
 
         Self {
@@ -88,7 +108,7 @@ where T: super::Instance,
 
         // enable selected channels
         T::regs().chselr().write(|w| w.0 = 0x0_u32);
-        for mut pin in pins {
+        for pin in pins {
             pin.set_as_analog();
             let channel = pin.channel();
             T::regs().chselr().modify(|w| w.set_chselx(channel as usize, true));

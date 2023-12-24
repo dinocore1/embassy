@@ -16,9 +16,7 @@ mod _version;
 #[cfg(not(any(adc_f1, adc_f3_v2)))]
 mod resolution;
 mod sample_time;
-mod continuous;
-
-pub use continuous::ContinuousAdc;
+pub mod continuous;
 
 #[allow(unused)]
 #[cfg(not(adc_f3_v2))]
