@@ -62,8 +62,7 @@ where T: super::Instance,
         }
     }
 
-    pub fn start<P>(&mut self, sample_time: SampleTime, sample_freq: Hertz, pins: impl IntoIterator<Item=P>, buf: &'d mut [u8])
-    where P: AdcPin<T>,
+    pub fn start(&mut self, sample_time: SampleTime, sample_freq: Hertz, pins: impl IntoIterator<Item=&'d mut dyn AdcPin<T>>, buf: &'d mut [u8]) -> ReadableRingBuffer<'d, AdcDma, u8>
     {
         
 
@@ -129,6 +128,8 @@ where T: super::Instance,
 
         self.timer.reset();
         self.timer.start();
+
+        ring_buf
 
 
     }
