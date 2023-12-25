@@ -50,14 +50,16 @@ where T: super::Instance,
         Timer::enable_and_reset();
 
         // A.7.1 ADC calibration code example
-        T::regs().cr().modify(|w| w.set_addis(true));
+        if T::regs().cr().read().aden() {
+            T::regs().cr().modify(|w| w.set_addis(true));
+        }
         while T::regs().cr().read().aden() {}
         T::regs().cfgr1().modify(|reg| reg.set_dmaen(false));
         T::regs().cr().modify(|reg| reg.set_adcal(true));
         while T::regs().cr().read().adcal() {}
 
-        //unsafe { T::Interrupt::enable() };
         T::Interrupt::unpend();
+        unsafe { T::Interrupt::enable() };
 
         Self {
             adc,
@@ -68,8 +70,6 @@ where T: super::Instance,
 
     pub fn start(&mut self, sample_time: SampleTime, sample_freq: Hertz, pins: impl IntoIterator<Item=&'d mut dyn AdcPin<T>>, buf: &'d mut [u8]) -> ReadableRingBuffer<'d, AdcDma, u8>
     {
-        
-
         const TRG4_TIM15_TRGO: u8 = 0b100;
 
         self.timer.stop();
