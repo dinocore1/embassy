@@ -7,7 +7,7 @@ use crate::{interrupt, Peripheral};
 use embassy_hal_internal::{into_ref, PeripheralRef};
 use embedded_hal_02::blocking::delay::DelayUs;
 use crate::interrupt::typelevel::Interrupt;
-use crate::timer::sealed::Basic16bitInstance as BasicTimer;
+use crate::timer::sealed::GeneralPurpose16bitInstance as BasicTimer;
 
 /// Interrupt handler.
 pub struct InterruptHandler<T: Instance> {
@@ -74,6 +74,7 @@ where T: super::Instance,
 
         self.timer.stop();
         self.timer.set_frequency(sample_freq);
+        self.timer.set_master_mode(stm32_metapac::timer::vals::Mms::UPDATE);
 
         // Clear the end of conversion, end of sampling flags, and overrun
         T::regs().isr().modify(|reg| {
@@ -105,7 +106,7 @@ where T: super::Instance,
         T::regs().cfgr1().modify(|reg| {
             reg.set_discen(false);
             reg.set_cont(false);
-            reg.set_exten(stm32_metapac::adc::vals::Exten::FALLINGEDGE);
+            reg.set_exten(stm32_metapac::adc::vals::Exten::BOTHEDGES);
             reg.set_extsel(TRG4_TIM15_TRGO);
             reg.set_scandir(stm32_metapac::adc::vals::Scandir::UPWARD);
             reg.set_dmacfg(stm32_metapac::adc::vals::Dmacfg::CIRCULAR);

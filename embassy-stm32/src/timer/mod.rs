@@ -144,6 +144,11 @@ pub(crate) mod sealed {
         fn set_clock_division(&mut self, ckd: vals::Ckd) {
             Self::regs_gp16().cr1().modify(|r| r.set_ckd(ckd));
         }
+
+        /// Set Master mode selection.
+        fn set_master_mode(&mut self, mms: vals::Mms) {
+            Self::regs_gp16().cr2().modify(|w| w.set_mms(mms));
+        }
     }
 
     /// Gneral-purpose 32-bit timer instance.
