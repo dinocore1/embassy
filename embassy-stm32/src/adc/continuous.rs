@@ -44,35 +44,19 @@ where T: super::Instance,
     AdcDma: super::AdcDma<T>,
 {
 
-    pub fn new(adc: impl Peripheral<P = T> + 'd, _irq: impl interrupt::typelevel::Binding<T::Interrupt, InterruptHandler<T>> + 'd, timer: impl Peripheral<P = Timer> + 'd, dma_ch: impl Peripheral<P = AdcDma> + 'd, delay: &mut impl DelayUs<u32>) -> Self {
+    pub fn new(adc: impl Peripheral<P = T> + 'd, _irq: impl interrupt::typelevel::Binding<T::Interrupt, InterruptHandler<T>> + 'd, timer: impl Peripheral<P = Timer> + 'd, dma_ch: impl Peripheral<P = AdcDma> + 'd, _delay: &mut impl DelayUs<u32>) -> Self {
         into_ref!(adc, dma_ch, timer);
         T::enable_and_reset();
         Timer::enable_and_reset();
 
-        // Delay 1μs when using HSI14 as the ADC clock.
-        //
-        // Table 57. ADC characteristics
-        // tstab = 14 * 1/fadc
-        delay.delay_us(1);
-
         // A.7.1 ADC calibration code example
+        T::regs().cr().modify(|w| w.set_addis(true));
+        while T::regs().cr().read().aden() {}
         T::regs().cfgr1().modify(|reg| reg.set_dmaen(false));
         T::regs().cr().modify(|reg| reg.set_adcal(true));
         while T::regs().cr().read().adcal() {}
 
-        // // A.7.2 ADC enable sequence code example
-        // if T::regs().isr().read().adrdy() {
-        //     T::regs().isr().modify(|reg| reg.set_adrdy(true));
-        // }
-        // T::regs().cr().modify(|reg| reg.set_aden(true));
-        // while !T::regs().isr().read().adrdy() {
-        //     // ES0233, 2.4.3 ADEN bit cannot be set immediately after the ADC calibration
-        //     // Workaround: When the ADC calibration is complete (ADCAL = 0), keep setting the
-        //     // ADEN bit until the ADRDY flag goes high.
-        //     T::regs().cr().modify(|reg| reg.set_aden(true));
-        // }
-
-        unsafe { T::Interrupt::enable() };
+        //unsafe { T::Interrupt::enable() };
         T::Interrupt::unpend();
 
         Self {
@@ -91,10 +75,11 @@ where T: super::Instance,
         self.timer.stop();
         self.timer.set_frequency(sample_freq);
 
-        // Clear the end of conversion and end of sampling flags
+        // Clear the end of conversion, end of sampling flags, and overrun
         T::regs().isr().modify(|reg| {
             reg.set_eoc(true);
             reg.set_eosmp(true);
+            reg.set_ovr(true);
         });
 
         // turn off interrupts
@@ -134,7 +119,7 @@ where T: super::Instance,
         let transfer_options = crate::dma::TransferOptions {
             circular: true,
             half_transfer_ir: true,
-            complete_transfer_ir: false,
+            complete_transfer_ir: true,
         };
 
         fn dr(r: crate::pac::adc::Adc) -> *mut u8 {
@@ -144,14 +129,22 @@ where T: super::Instance,
         let mut ring_buf = unsafe { ReadableRingBuffer::new(self.dma_ch.clone_unchecked(), request, dr(T::regs()), buf, transfer_options) };
         ring_buf.start();
 
+        // Clear the ready bit
+        T::regs().isr().modify(|w| w.set_adrdy(true));
+
+        // Enable the ADC
         T::regs().cr().modify(|reg| reg.set_aden(true));
+
+        // Wait for the ADC to become ready
+        while !T::regs().isr().read().adrdy() {}
+
+        // start the conversion (when the hardware trigger event occurs)
+        T::regs().cr().modify(|w| w.set_adstart(true));
 
         self.timer.reset();
         self.timer.start();
 
         ring_buf
-
-
     }
 
     
