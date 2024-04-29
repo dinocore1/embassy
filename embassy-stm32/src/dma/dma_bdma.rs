@@ -329,7 +329,7 @@ impl AnyChannel {
         }
     }
 
-    unsafe fn configure(
+    pub(crate) unsafe fn configure(
         &self,
         _request: Request,
         dir: Dir,
@@ -421,7 +421,7 @@ impl AnyChannel {
         }
     }
 
-    fn start(&self) {
+    pub(crate) fn start(&self) {
         let info = self.info();
         match self.info().dma {
             #[cfg(dma)]

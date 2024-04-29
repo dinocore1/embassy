@@ -30,7 +30,7 @@ use crate::interrupt;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-enum Dir {
+pub(crate) enum Dir {
     MemoryToPeripheral,
     PeripheralToMemory,
 }

@@ -12,6 +12,9 @@ use crate::interrupt::typelevel::Interrupt;
 use crate::peripherals::ADC;
 use crate::{interrupt, Peripheral};
 
+mod cyclic;
+pub use cyclic::*;
+
 pub const VDDA_CALIB_MV: u32 = 3300;
 pub const VREF_INT: u32 = 1230;
 

@@ -1143,6 +1143,7 @@ fn main() {
         (("octospi", "OCTOSPI1"), quote!(crate::ospi::OctoDma)),
         (("dac", "CH1"), quote!(crate::dac::DacDma1)),
         (("dac", "CH2"), quote!(crate::dac::DacDma2)),
+        (("adc", "ADC"), quote!(crate::adc::AdcDma)),
         (("timer", "UP"), quote!(crate::timer::UpDma)),
         (("hash", "IN"), quote!(crate::hash::Dma)),
         (("cryp", "IN"), quote!(crate::cryp::DmaIn)),

@@ -34,6 +34,16 @@ pub struct Adc<'d, T: Instance> {
     sample_time: SampleTime,
 }
 
+pub struct CyclicAdc<'d, T, TimerInstance, DmaInstance>
+where T: Instance,
+    TimerInstance: crate::timer::BasicInstance,
+    DmaInstance: AdcDma<T>
+{
+    adc: crate::PeripheralRef<'d, T>,
+    timer: crate::timer::low_level::Timer<'d, TimerInstance>,
+    dma: crate::PeripheralRef<'d, DmaInstance>,
+}
+
 #[cfg(any(adc_f1, adc_f3, adc_v1, adc_l0, adc_f3_v1_1))]
 pub struct State {
     pub waker: AtomicWaker,
@@ -103,6 +113,9 @@ pub(crate) fn blocking_delay_us(us: u32) {
 pub trait Instance: SealedInstance + crate::Peripheral<P = Self> {
     type Interrupt: crate::interrupt::typelevel::Interrupt;
 }
+
+dma_trait!(AdcDma, Instance);
+
 /// ADC instance.
 #[cfg(any(
     adc_f1,
