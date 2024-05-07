@@ -5,7 +5,21 @@ use core::ops::Range;
 use core::sync::atomic::{compiler_fence, Ordering};
 use core::task::{Poll, Waker};
 
+use embassy_hal_internal::PeripheralRef;
+
 use super::word::Word;
+
+pub struct DumbDmaRingBuf<'a, 'd, W: Word> {
+    pub(crate) dma_buf: &'a mut [W],
+    pub(crate) channel: PeripheralRef<'d, super::AnyChannel>,
+}
+
+impl<'a, 'd, W: Word> AsRef<[W]> for DumbDmaRingBuf<'a, 'd, W> {
+    fn as_ref(&self) -> &[W] {
+        self.dma_buf.as_ref()
+    }
+}
+
 
 /// A "read-only" ring-buffer to be used together with the DMA controller which
 /// writes in a circular way, "uncontrolled" to the buffer.

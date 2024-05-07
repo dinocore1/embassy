@@ -4,6 +4,7 @@ use core::marker::PhantomData;
 use crate::adc::AdcPin;
 use crate::adc::Instance;
 use crate::adc::CyclicAdc;
+use crate::dma::ringbuffer::DumbDmaRingBuf;
 use crate::{interrupt, Peripheral};
 use embassy_hal_internal::into_ref;
 use crate::interrupt::typelevel::Interrupt;
@@ -59,7 +60,7 @@ where T: Instance,
         }
     }
 
-    pub fn start<'a>(&mut self, sample_time: super::SampleTime, sample_freq: crate::time::Hertz, pins: impl IntoIterator<Item=&'d mut dyn AdcPin<T>>, buffer: &'a mut [u8]) {
+    pub fn start<'a>(&mut self, sample_time: super::SampleTime, sample_freq: crate::time::Hertz, pins: impl IntoIterator<Item=&'d mut dyn AdcPin<T>>, buffer: &'a mut [u8]) -> crate::dma::ringbuffer::DumbDmaRingBuf<'a, '_, u8> {
 
         self.timer.set_frequency(sample_freq);
 
@@ -141,6 +142,11 @@ where T: Instance,
         T::regs().cr().modify(|w| w.set_adstart(true));
 
         self.timer.start();
+
+        DumbDmaRingBuf {
+            dma_buf: buffer,
+            channel: dma_channel,
+        }
         
 
     }

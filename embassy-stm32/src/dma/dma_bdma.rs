@@ -6,7 +6,7 @@ use core::task::{Context, Poll, Waker};
 use embassy_hal_internal::{into_ref, Peripheral, PeripheralRef};
 use embassy_sync::waitqueue::AtomicWaker;
 
-use super::ringbuffer::{DmaCtrl, OverrunError, ReadableDmaRingBuffer, WritableDmaRingBuffer};
+use super::ringbuffer::{DmaCtrl, OverrunError, ReadableDmaRingBuffer, WritableDmaRingBuffer, DumbDmaRingBuf};
 use super::word::{Word, WordSize};
 use super::{AnyChannel, Channel, Dir, Request, STATE};
 use crate::interrupt::typelevel::Interrupt;
@@ -746,6 +746,25 @@ impl<'a> DmaCtrl for DmaCtrlImpl<'a> {
 
     fn set_waker(&mut self, waker: &Waker) {
         STATE[self.0.id as usize].waker.register(waker);
+    }
+}
+
+impl<'a, 'd, W: Word> DumbDmaRingBuf<'a, 'd, W> {
+
+    pub async fn ready(&mut self) {
+        let mut dma = DmaCtrlImpl(self.channel.reborrow());
+        
+        let v = dma.reset_complete_count();
+        poll_fn(|cx| {
+            if dma.get_complete_count() != v {
+                Poll::Ready(())
+            } else {
+                dma.set_waker(cx.waker());
+                Poll::Pending
+            }
+            
+
+        }).await
     }
 }
 
