@@ -40,6 +40,7 @@ where T: Instance,
             dma: impl Peripheral<P = DmaInstance> + 'd
         ) -> Self {
         into_ref!(adc, dma);
+        T::enable_and_reset();
 
         // A.7.1 ADC calibration code example
         if T::regs().cr().read().aden() {
@@ -63,6 +64,8 @@ where T: Instance,
     pub fn start<'a>(&mut self, sample_time: super::SampleTime, sample_freq: crate::time::Hertz, pins: impl IntoIterator<Item=&'d mut dyn AdcPin<T>>, buffer: &'a mut [u8]) -> crate::dma::ringbuffer::DumbDmaRingBuf<'a, '_, u8> {
 
         self.timer.set_frequency(sample_freq);
+
+        self.timer.regs_basic().cr2().modify(|w| w.set_mms(stm32_metapac::timer::vals::Mms::UPDATE));
 
         // Clear the end of conversion, end of sampling flags, and overrun
         T::regs().isr().modify(|reg| {
