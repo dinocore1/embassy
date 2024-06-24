@@ -95,11 +95,12 @@ where T: Instance,
         T::regs().smpr().modify(|reg| reg.set_smp(sample_time.into()));
 
         const TRG4_TIM15_TRGO: u8 = 0b100;
+        const TRG0_TIM1_TRGO: u8 = 0b000;
         T::regs().cfgr1().modify(|reg| {
             reg.set_discen(false);
             reg.set_cont(false);
             reg.set_exten(stm32_metapac::adc::vals::Exten::BOTHEDGES);
-            reg.set_extsel(TRG4_TIM15_TRGO);
+            reg.set_extsel(TRG0_TIM1_TRGO);
             reg.set_scandir(stm32_metapac::adc::vals::Scandir::UPWARD);
             reg.set_dmacfg(stm32_metapac::adc::vals::Dmacfg::CIRCULAR);
             reg.set_dmaen(true);
